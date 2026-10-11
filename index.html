@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hechtkarte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/app.css?v=8">
+<link rel="stylesheet" href="css/app.css?v=10">
 </head>
 <body>
 
@@ -83,6 +83,24 @@
       </div>
       <ul id="searchResults" class="searchres" hidden></ul>
     </form>
+    <div class="layerctl" id="layerCtl">
+      <button type="button" class="layerbtn" id="layerBtn" aria-expanded="false" aria-controls="layerPanel" aria-label="Kartenebenen" title="Kartenebenen">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 3 2.5 8 12 13l9.5-5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m2.5 12 9.5 5 9.5-5M2.5 16l9.5 5 9.5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="layerpanel" id="layerPanel" hidden>
+        <fieldset>
+          <legend class="label">Karte</legend>
+          <label class="check small"><input type="radio" name="baseLayer" value="img"> Luftbild</label>
+          <label class="check small"><input type="radio" name="baseLayer" value="osm"> Karte (OpenStreetMap)</label>
+        </fieldset>
+        <fieldset>
+          <legend class="label">Anzeigen</legend>
+          <label class="check small"><input type="checkbox" id="ovCatches" checked> Fänge</label>
+          <label class="check small"><input type="checkbox" id="ovSpots" checked> Fähnchen</label>
+          <label class="check small" id="ovHomeWrap"><input type="checkbox" id="ovHome" checked> Homebase</label>
+        </fieldset>
+      </div>
+    </div>
     <div id="maphint" class="maphint" hidden>Tippe auf die Karte, wo der Fisch gebissen hat</div>
     <div class="legend" aria-hidden="true">
       <span><i class="sp sp-hecht"></i>Hecht</span>
@@ -319,8 +337,8 @@
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/supabase.js"></script>
-<script src="js/config.js?v=8"></script>
-<script src="js/loughs.js?v=8"></script>
-<script src="js/app.js?v=8"></script>
+<script src="js/config.js?v=10"></script>
+<script src="js/loughs.js?v=10"></script>
+<script src="js/app.js?v=10"></script>
 </body>
 </html>

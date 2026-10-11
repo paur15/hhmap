@@ -305,7 +305,7 @@ async function refreshPhotoUrls() {
 }
 
 /* ---------------------------------------------------------------- map */
-let homeLayer = null, homeMarker = null;
+let homeLayer = null, homeMarker = null, baseImg = null, baseOsm = null;
 let map = null, catchLayer = null, spotLayer = null, gpsLayer = null, searchLayer = null, draftMarker = null, flagMarker = null;
 const markers = new Map();
 const ESRI_ATTR = 'Powered by <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> | Esri, Maxar, Earthstar Geographics, and the GIS User Community';
@@ -329,16 +329,15 @@ function initMap() {
   const osm = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     { maxNativeZoom: 19, maxZoom: 20, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende' });
 
+  baseImg = hybrid; baseOsm = osm;
   (lsGet("hk-base") === "osm" ? osm : hybrid).addTo(map);
   catchLayer = L.layerGroup().addTo(map);
   spotLayer = L.layerGroup().addTo(map);
   homeLayer = L.layerGroup().addTo(map);
-  const overlays = { "Fänge": catchLayer, "Fähnchen": spotLayer };
-  if (addHomebase()) overlays["Homebase"] = homeLayer;
-  L.control.layers({ "Luftbild": hybrid, "Karte (OpenStreetMap)": osm }, overlays, { position: "topright" }).addTo(map);
+  $("ovHomeWrap").hidden = !addHomebase();
+  syncLayerUi();
   const zoomCls = () => map.getContainer().classList.toggle("z-lo", map.getZoom() < 10);
   map.on("zoomend", zoomCls); zoomCls();
-  map.on("baselayerchange", e => lsSet("hk-base", e.layer === osm ? "osm" : "img"));
 
   // Luftbilder nicht ladbar (z. B. Schlüssel abgelaufen) → auf OpenStreetMap ausweichen
   let ok = 0, bad = 0, warned = false;
@@ -347,7 +346,7 @@ function initMap() {
     bad++;
     if (!warned && bad >= 6 && ok === 0) {
       warned = true;
-      map.removeLayer(hybrid); osm.addTo(map);
+      setBase("osm", false);
       showNotice("Die Luftbilder konnten nicht geladen werden. Vermutlich ist der Esri-Schlüssel abgelaufen oder gesperrt. Bis dahin zeigt die Karte OpenStreetMap.", true, "tiles");
     }
   });
@@ -462,6 +461,36 @@ function guessWater(lat, lng) {
   return "";
 }
 
+/* Eigenes Ebenen-Menü (das eingebaute von Leaflet ist auf Touch-Geräten unzuverlässig) */
+function setBase(which, remember) {
+  if (!map) return;
+  const want = which === "osm" ? baseOsm : baseImg, other = which === "osm" ? baseImg : baseOsm;
+  if (map.hasLayer(other)) map.removeLayer(other);
+  if (!map.hasLayer(want)) want.addTo(map);
+  if (remember !== false) lsSet("hk-base", which);
+  syncLayerUi();
+}
+function showOverlay(layer) { if (layer && !map.hasLayer(layer)) layer.addTo(map); syncLayerUi(); }
+function syncLayerUi() {
+  if (!map) return;
+  document.querySelectorAll('input[name="baseLayer"]').forEach(i => { i.checked = (i.value === "osm") === map.hasLayer(baseOsm); });
+  $("ovCatches").checked = map.hasLayer(catchLayer);
+  $("ovSpots").checked = map.hasLayer(spotLayer);
+  $("ovHome").checked = !!homeLayer && map.hasLayer(homeLayer);
+}
+function closeLayerPanel() { $("layerPanel").hidden = true; $("layerBtn").setAttribute("aria-expanded", "false"); }
+$("layerBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  const open = $("layerPanel").hidden;
+  $("layerPanel").hidden = !open; $("layerBtn").setAttribute("aria-expanded", String(open));
+  if (open) { hideResults(); syncLayerUi(); }
+});
+document.addEventListener("click", e => { if (!$("layerPanel").hidden && !$("layerCtl").contains(e.target)) closeLayerPanel(); });
+document.querySelectorAll('input[name="baseLayer"]').forEach(i => i.addEventListener("change", () => setBase(i.value)));
+[["ovCatches", () => catchLayer], ["ovSpots", () => spotLayer], ["ovHome", () => homeLayer]].forEach(([id, get]) => {
+  $(id).addEventListener("change", () => { const l = get(); if (!l) return; if ($(id).checked) l.addTo(map); else map.removeLayer(l); });
+});
+
 /* Ortssuche über OpenStreetMap Nominatim.
    Nutzungsregeln: nur auf Knopfdruck suchen (kein Suchen beim Tippen),
    höchstens eine Anfrage pro Sekunde, Quelle angeben. */
@@ -528,6 +557,7 @@ $("search").addEventListener("submit", async ev => {
   } finally { searchBusy = false; }
 });
 $("searchQ").addEventListener("input", () => { if (!$("searchQ").value.trim()) { hideResults(); searchLayer && searchLayer.clearLayers(); } });
+$("searchQ").addEventListener("focus", closeLayerPanel);
 $("searchQ").addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); hideResults(); $("searchQ").blur(); } });
 
 /* ---------------------------------------------------------------- popups */
@@ -1042,7 +1072,7 @@ function renderSpots() {
     const li = el("li"), b = el("button"); b.type = "button";
     b.append(el("span", "sw castle-sw"), el("span", "lb", HOME.label + (HOME.name ? " · " + HOME.name : "")), el("span", "kd", "Burg"));
     b.addEventListener("click", () => {
-      if (!map.hasLayer(homeLayer)) homeLayer.addTo(map);
+      showOverlay(homeLayer);
       flyTo(homeMarker.getLatLng(), 15); map.once("moveend", () => homeMarker.openPopup());
     });
     li.append(b); ul.append(li);
@@ -1053,7 +1083,7 @@ function renderSpots() {
     b.append(sw, el("span", "lb", s.label), el("span", "kd", KIND_BY[s.kind].s));
     b.addEventListener("click", () => {
       const m = spotMarkers.get(s.id); if (!m) return;
-      if (!map.hasLayer(spotLayer)) spotLayer.addTo(map);
+      showOverlay(spotLayer);
       flyTo(m.getLatLng(), 15); map.once("moveend", () => m.openPopup());
     });
     li.append(b); ul.append(li);
@@ -1112,7 +1142,7 @@ function openFlagForm(s) {
   $("flagSpot").classList.remove("ok");
   $("flagSpotText").textContent = "Tippe auf die Karte, wo das Fähnchen hin soll.";
   clearFlagDraft(); map.closePopup();
-  if (!map.hasLayer(spotLayer)) spotLayer.addTo(map);
+  showOverlay(spotLayer);
   if (s) { renderSpots(); setFlagDraft(s.lat, s.lng); }
   else { $("maphint").textContent = "Tippe auf die Karte, wo das Fähnchen hin soll"; $("maphint").hidden = false; }
   map.getContainer().classList.add("placing");
