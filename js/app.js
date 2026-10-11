@@ -18,7 +18,8 @@ const state = {
   catches: [], loaded: false, year: "all", angler: "all", sel: null,
   editing: null, formOpen: false, draft: null, waterAuto: true, saving: false,
   photoFile: null, photoRemoved: false, photoUrls: new Map(), photoUrlsAt: 0,
-  firstFit: false, signup: false
+  firstFit: false, signup: false,
+  spots: [], spotsMissing: false, flagOpen: false, flagEditing: null, flagDraft: null, flagKind: "hotspot"
 };
 
 const LURES = ["Gummifisch", "Jerkbait", "Wobbler", "Spinner", "Blinker", "Spinnerbait", "Swimbait", "Köderfisch", "Hechtfliege", "Twitchbait"];
@@ -199,7 +200,11 @@ async function enter() {
 
 function teardown() {
   if (channel) { sb.removeChannel(channel); channel = null; }
+  if (spotChannel) { sb.removeChannel(spotChannel); spotChannel = null; }
   if (state.formOpen) closeForm();
+  if (state.flagOpen) closeFlagForm();
+  state.spots = [];
+  if (spotLayer) spotLayer.clearLayers();
   state.session = null; state.email = ""; state.isAdmin = false;
   state.catches = []; state.loaded = false; state.sel = null; state.firstFit = false;
   state.photoUrls.clear();
@@ -209,13 +214,40 @@ function teardown() {
 }
 
 /* ---------------------------------------------------------------- data */
-let channel = null, reloadTimer = null;
+let channel = null, spotChannel = null, reloadTimer = null;
+function subscribeSpots() {
+  if (spotChannel) return;
+  spotChannel = sb.channel("spots-live")
+    .on("postgres_changes", { event: "*", schema: "public", table: "spots" }, scheduleReload)
+    .subscribe();
+}
+function spotFromRow(r) {
+  const lat = Number(r.lat), lng = Number(r.lng);
+  if (!isFinite(lat) || !isFinite(lng)) return null;
+  return { id: r.id, owner: (r.owner_email || "").toLowerCase(), label: r.label || "Fähnchen",
+    kind: KIND_BY[r.kind] ? r.kind : "sonstiges", note: r.note || "", lat, lng };
+}
 async function reload() {
-  const { data, error } = await sb.from("catches")
-    .select("id,owner_email,angler,caught_on,water,lat,lng,length_cm,weight_kg,lure,released,note,photo_path,created_at")
-    .order("caught_on", { ascending: false })
-    .order("created_at", { ascending: false })
-    .limit(5000);
+  const [cres, sres] = await Promise.all([
+    sb.from("catches")
+      .select("id,owner_email,angler,caught_on,water,lat,lng,length_cm,weight_kg,lure,released,note,photo_path,created_at")
+      .order("caught_on", { ascending: false })
+      .order("created_at", { ascending: false })
+      .limit(5000),
+    sb.from("spots").select("id,owner_email,label,kind,note,lat,lng,created_at").order("label").limit(2000)
+  ]);
+  if (sres.error) {
+    state.spots = [];
+    state.spotsMissing = sres.error.code === "42P01" || sres.error.code === "PGRST205" || /spots/i.test(sres.error.message || "");
+    if (state.spotsMissing && state.isAdmin && noticeKind !== "tiles")
+      showNotice("Für die Fähnchen fehlt noch die Datenbank-Tabelle. Führe einmal supabase/002_faehnchen.sql im SQL-Editor von Supabase aus.", false, "spots");
+  } else {
+    state.spotsMissing = false;
+    if (noticeKind === "spots") hideNotice();
+    state.spots = (sres.data || []).map(spotFromRow).filter(Boolean);
+    if (!spotChannel) subscribeSpots();
+  }
+  const { data, error } = cres;
   if (error) {
     state.loaded = true; render();
     showNotice("Die Fänge konnten nicht geladen werden. " + explainDb(error), true, "load");
@@ -253,7 +285,7 @@ async function refreshPhotoUrls() {
 }
 
 /* ---------------------------------------------------------------- map */
-let map = null, catchLayer = null, gpsLayer = null, searchLayer = null, draftMarker = null;
+let map = null, catchLayer = null, spotLayer = null, gpsLayer = null, searchLayer = null, draftMarker = null, flagMarker = null;
 const markers = new Map();
 const ESRI_ATTR = 'Powered by <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> | Esri, Maxar, Earthstar Geographics, and the GIS User Community';
 
@@ -277,7 +309,11 @@ function initMap() {
     { maxNativeZoom: 19, maxZoom: 20, attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende' });
 
   (lsGet("hk-base") === "osm" ? osm : hybrid).addTo(map);
-  L.control.layers({ "Luftbild": hybrid, "Karte (OpenStreetMap)": osm }, null, { position: "topright" }).addTo(map);
+  catchLayer = L.layerGroup().addTo(map);
+  spotLayer = L.layerGroup().addTo(map);
+  L.control.layers({ "Luftbild": hybrid, "Karte (OpenStreetMap)": osm }, { "Fänge": catchLayer, "Fähnchen": spotLayer }, { position: "topright" }).addTo(map);
+  const zoomCls = () => map.getContainer().classList.toggle("z-lo", map.getZoom() < 10);
+  map.on("zoomend", zoomCls); zoomCls();
   map.on("baselayerchange", e => lsSet("hk-base", e.layer === osm ? "osm" : "img"));
 
   // Luftbilder nicht ladbar (z. B. Schlüssel abgelaufen) → auf OpenStreetMap ausweichen
@@ -319,10 +355,27 @@ function initMap() {
   });
   new Locate().addTo(map);
 
-  catchLayer = L.layerGroup().addTo(map);
+  const FlagCtl = L.Control.extend({
+    options: { position: "topleft" },
+    onAdd() {
+      const div = L.DomUtil.create("div", "leaflet-bar");
+      const b = L.DomUtil.create("button", "flag-btn", div);
+      b.type = "button"; b.title = "Fähnchen setzen"; b.setAttribute("aria-label", "Fähnchen setzen");
+      b.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 22V3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><path d="M6 4h12l-3 4.5 3 4.5H6z" fill="currentColor"/></svg>';
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.on(b, "click", () => openFlagForm(null));
+      return div;
+    }
+  });
+  new FlagCtl().addTo(map);
+
   gpsLayer = L.layerGroup().addTo(map);
   searchLayer = L.layerGroup().addTo(map);
-  map.on("click", e => { hideResults(); if (state.formOpen) setDraft(e.latlng.lat, e.latlng.lng, false); });
+  map.on("click", e => {
+    hideResults();
+    if (state.formOpen) setDraft(e.latlng.lat, e.latlng.lng, false);
+    else if (state.flagOpen) setFlagDraft(e.latlng.lat, e.latlng.lng);
+  });
 }
 
 function fitToCatches() {
@@ -560,6 +613,7 @@ function render() {
   else empty.hidden = true;
 
   renderMarkers(list);
+  renderSpots();
 }
 
 function renderMarkers(list) {
@@ -635,6 +689,8 @@ function setPreview(src) {
 
 let delArmed = false;
 function openForm(c) {
+  if (state.flagOpen) closeFlagForm();
+  $("maphint").textContent = "Tippe auf die Karte, wo der Hecht gebissen hat";
   state.formOpen = true; state.editing = c ? c.id : null;
   $("formTitle").textContent = c ? "Fang bearbeiten" : "Neuer Fang";
   $("saveBtn").textContent = c ? "Änderungen speichern" : "Fang speichern";
@@ -809,7 +865,192 @@ $("delBtn").addEventListener("click", async () => {
 });
 
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && state.formOpen && !document.querySelector("dialog[open]")) closeForm();
+  if (e.key !== "Escape" || document.querySelector("dialog[open]")) return;
+  if (state.formOpen) closeForm(); else if (state.flagOpen) closeFlagForm();
+});
+
+/* ---------------------------------------------------------------- Fähnchen */
+const KINDS = [
+  { k: "hotspot", t: "Hotspot", s: "Hotspot" },
+  { k: "slip", t: "Slipanlage", s: "Slip" },
+  { k: "achtung", t: "Achtung (Untiefe, Felsen)", s: "Achtung" },
+  { k: "unterkunft", t: "Unterkunft", s: "Unterkunft" },
+  { k: "parken", t: "Parkplatz", s: "Parken" },
+  { k: "sonstiges", t: "Sonstiges", s: "Sonstiges" }
+];
+const KIND_BY = Object.fromEntries(KINDS.map(k => [k.k, k]));
+const FLAG_SVG = '<svg viewBox="0 0 24 30" width="24" height="30" aria-hidden="true"><path d="M4 2.5v26" stroke="#15201a" stroke-width="2.6" stroke-linecap="round"/><path d="M5.2 3h15.3l-4.2 5.2 4.2 5.2H5.2z" fill="currentColor" stroke="#15201a" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+
+function flagIcon(kind, label, draft) {
+  const d = el("div", "flag fk-" + kind + (draft ? " draft-flag" : ""));
+  d.innerHTML = FLAG_SVG;
+  if (label) d.append(el("span", "flag-label", label));
+  return L.divIcon({ className: "", html: d, iconSize: [24, 30], iconAnchor: [4, 29], popupAnchor: [8, -28] });
+}
+
+function spotPopup(s) {
+  const d = el("div", "pop");
+  d.append(el("span", "ttl", s.label));
+  const kc = el("span", "kindchip fk-" + s.kind); kc.append(el("span", "sw"), KIND_BY[s.kind].t); d.append(kc);
+  if (s.note) d.append(el("p", "note", s.note));
+  d.append(el("span", "coord", s.lat.toFixed(5) + ", " + s.lng.toFixed(5)));
+  const row = el("div", "row");
+  const a = el("a", null, (s.kind === "slip" || s.kind === "unterkunft" || s.kind === "parken") ? "Route in Google Maps" : "In Google Maps öffnen");
+  a.href = (s.kind === "slip" || s.kind === "unterkunft" || s.kind === "parken")
+    ? "https://www.google.com/maps/dir/?api=1&destination=" + s.lat.toFixed(6) + "," + s.lng.toFixed(6)
+    : "https://www.google.com/maps?q=" + s.lat.toFixed(6) + "," + s.lng.toFixed(6);
+  a.target = "_blank"; a.rel = "noopener"; row.append(a);
+  if (canModify(s)) {
+    const b = el("button", "btn link", "Bearbeiten"); b.type = "button";
+    b.addEventListener("click", () => { map.closePopup(); openFlagForm(s); });
+    row.append(b);
+  }
+  d.append(row);
+  return d;
+}
+
+const spotMarkers = new Map();
+function renderSpots() {
+  if (!map) return;
+  spotLayer.clearLayers(); spotMarkers.clear();
+  state.spots.forEach(s => {
+    if (state.flagOpen && state.flagEditing === s.id) return;
+    const m = L.marker([s.lat, s.lng], { icon: flagIcon(s.kind, s.label), title: s.label, riseOnHover: true });
+    m.bindPopup(() => spotPopup(s), { maxWidth: 260, minWidth: 200 });
+    m.addTo(spotLayer); spotMarkers.set(s.id, m);
+  });
+  const ul = $("spotList"); ul.textContent = "";
+  [...state.spots].sort((a, b) => a.label.localeCompare(b.label, "de")).forEach(s => {
+    const li = el("li"), b = el("button"); b.type = "button";
+    const sw = el("span", "sw fk-" + s.kind);
+    b.append(sw, el("span", "lb", s.label), el("span", "kd", KIND_BY[s.kind].s));
+    b.addEventListener("click", () => {
+      const m = spotMarkers.get(s.id); if (!m) return;
+      if (!map.hasLayer(spotLayer)) spotLayer.addTo(map);
+      flyTo(m.getLatLng(), 15); map.once("moveend", () => m.openPopup());
+    });
+    li.append(b); ul.append(li);
+  });
+  $("spotCount").textContent = state.spots.length ? String(state.spots.length) : "";
+  $("spotEmpty").hidden = state.spots.length > 0;
+}
+
+function buildKinds() {
+  const box = $("flagKinds"); box.textContent = "";
+  KINDS.forEach(k => {
+    const lab = el("label", "kind fk-" + k.k);
+    const inp = el("input"); inp.type = "radio"; inp.name = "flagKind"; inp.value = k.k;
+    inp.addEventListener("change", () => { state.flagKind = k.k; if (flagMarker) flagMarker.setIcon(flagIcon(k.k, $("flagLabel").value.trim(), true)); });
+    lab.append(inp, el("span", "sw"), k.s);
+    box.append(lab);
+  });
+}
+buildKinds();
+function setKind(k) {
+  state.flagKind = k;
+  document.querySelectorAll('input[name="flagKind"]').forEach(i => { i.checked = i.value === k; });
+}
+
+function setFlagDraft(lat, lng) {
+  state.flagDraft = { lat, lng };
+  const icon = flagIcon(state.flagKind, $("flagLabel").value.trim(), true);
+  if (!flagMarker) {
+    flagMarker = L.marker([lat, lng], { icon, draggable: true, keyboard: false, zIndexOffset: 1000 }).addTo(map);
+    flagMarker.on("dragend", () => { const p = flagMarker.getLatLng(); state.flagDraft = { lat: p.lat, lng: p.lng }; });
+  } else { flagMarker.setLatLng([lat, lng]); flagMarker.setIcon(icon); }
+  $("flagSpot").classList.add("ok");
+  $("flagSpotText").textContent = "Fähnchen gesetzt. Du kannst es auf der Karte verschieben.";
+  $("maphint").hidden = true;
+}
+function clearFlagDraft() { if (flagMarker) { map.removeLayer(flagMarker); flagMarker = null; } state.flagDraft = null; }
+
+let flagDelArmed = false;
+function openFlagForm(s) {
+  if (state.spotsMissing) {
+    showNotice(state.isAdmin
+      ? "Für die Fähnchen fehlt noch die Datenbank-Tabelle. Führe einmal supabase/002_faehnchen.sql im SQL-Editor von Supabase aus."
+      : "Die Fähnchen sind noch nicht eingerichtet. Sag dem Verwalter Bescheid.", true, "spots");
+    return;
+  }
+  if (state.formOpen) closeForm();
+  if (state.flagOpen) closeFlagForm();
+  state.flagOpen = true; state.flagEditing = s ? s.id : null;
+  $("flagTitle").textContent = s ? "Fähnchen bearbeiten" : "Neues Fähnchen";
+  $("flagSave").textContent = s ? "Änderungen speichern" : "Fähnchen setzen";
+  $("flagDel").hidden = !s; $("flagDel").textContent = "Löschen"; flagDelArmed = false;
+  setMsg("flagErr", ""); $("flagHint").textContent = ""; $("flagHint").className = "hint";
+  $("flagLabel").value = s ? s.label : "";
+  $("flagNote").value = s ? s.note : "";
+  setKind(s ? s.kind : (lsGet("hk-flagkind") || "hotspot"));
+  $("flagSpot").classList.remove("ok");
+  $("flagSpotText").textContent = "Tippe auf die Karte, wo das Fähnchen hin soll.";
+  clearFlagDraft(); map.closePopup();
+  if (!map.hasLayer(spotLayer)) spotLayer.addTo(map);
+  if (s) { renderSpots(); setFlagDraft(s.lat, s.lng); }
+  else { $("maphint").textContent = "Tippe auf die Karte, wo das Fähnchen hin soll"; $("maphint").hidden = false; }
+  map.getContainer().classList.add("placing");
+  $("viewList").hidden = true; $("flagForm").hidden = false; $("addBtn").hidden = true;
+  $("flagForm").closest(".panel").scrollTop = 0;
+}
+function closeFlagForm() {
+  const wasEditing = state.flagEditing;
+  state.flagOpen = false; state.flagEditing = null;
+  clearFlagDraft(); $("maphint").hidden = true;
+  if (map) map.getContainer().classList.remove("placing");
+  $("flagForm").hidden = true; $("viewList").hidden = false; $("addBtn").hidden = false;
+  if (wasEditing) renderSpots();
+}
+
+$("flagCancel").addEventListener("click", closeFlagForm);
+$("flagLabel").addEventListener("input", () => { if (flagMarker) flagMarker.setIcon(flagIcon(state.flagKind, $("flagLabel").value.trim(), true)); });
+$("flagGps").addEventListener("click", async () => {
+  const b = $("flagGps"), h = $("flagHint");
+  b.disabled = true; b.textContent = "Orte …"; h.className = "hint"; h.textContent = "";
+  try {
+    const pos = await getPosition();
+    const ll = showGps(pos);
+    setFlagDraft(ll[0], ll[1]);
+    h.textContent = "Genauigkeit ± " + Math.round(pos.coords.accuracy) + " m";
+    flyTo(ll, 16);
+  } catch (e) { h.textContent = geoError(e); h.className = "hint err"; }
+  finally { b.disabled = false; b.textContent = "Meine Position"; }
+});
+
+$("flagForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  setMsg("flagErr", "");
+  if (!state.flagDraft) { setMsg("flagErr", "Tippe zuerst auf die Karte oder nimm deine Position."); return; }
+  const label = $("flagLabel").value.trim();
+  if (!label) { setMsg("flagErr", "Gib dem Fähnchen eine Beschriftung."); $("flagLabel").focus(); return; }
+  const row = {
+    label: label.slice(0, 60), kind: state.flagKind, note: $("flagNote").value.trim().slice(0, 280) || null,
+    lat: Math.round(state.flagDraft.lat * 1e6) / 1e6, lng: Math.round(state.flagDraft.lng * 1e6) / 1e6
+  };
+  const b = $("flagSave"); b.disabled = true;
+  try {
+    const q = state.flagEditing
+      ? sb.from("spots").update(row).eq("id", state.flagEditing).select("id").single()
+      : sb.from("spots").insert(row).select("id").single();
+    const { error } = await q;
+    if (error) throw error;
+    lsSet("hk-flagkind", row.kind);
+    closeFlagForm();
+    await reload();
+  } catch (e) { setMsg("flagErr", explainDb(e)); }
+  finally { b.disabled = false; }
+});
+
+$("flagDel").addEventListener("click", async () => {
+  if (!state.flagEditing) return;
+  if (!flagDelArmed) { flagDelArmed = true; $("flagDel").textContent = "Wirklich löschen?"; return; }
+  const b = $("flagDel"); b.disabled = true;
+  try {
+    const { data, error } = await sb.from("spots").delete().eq("id", state.flagEditing).select("id");
+    if (error) throw error;
+    if (!data || !data.length) throw { code: "PGRST116" };
+    closeFlagForm(); await reload();
+  } catch (e) { setMsg("flagErr", explainDb(e)); }
+  finally { b.disabled = false; }
 });
 
 /* ---------------------------------------------------------------- menu + dialogs */

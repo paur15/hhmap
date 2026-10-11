@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hechtkarte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/app.css?v=3">
+<link rel="stylesheet" href="css/app.css?v=4">
 </head>
 <body>
 
@@ -137,6 +137,11 @@
         <ol class="list" id="list"></ol>
         <div class="empty" id="empty"><strong>Fänge werden geladen …</strong></div>
       </div>
+      <div class="section tight">
+        <div class="listhead"><h2>Fähnchen</h2><span id="spotCount"></span></div>
+        <ul class="spotlist" id="spotList"></ul>
+        <p class="hint" id="spotEmpty">Mit dem Fähnchen-Knopf links auf der Karte markierst du Slipanlagen, Hotspots, Untiefen oder eure Unterkunft.</p>
+      </div>
     </div>
 
     <form id="form" class="form" hidden novalidate>
@@ -200,6 +205,38 @@
       </div>
     </form>
 
+    <form id="flagForm" class="form" hidden novalidate>
+      <h2 id="flagTitle">Neues Fähnchen</h2>
+
+      <div class="spot" id="flagSpot">
+        <span class="label">Position</span>
+        <p id="flagSpotText">Tippe auf die Karte, wo das Fähnchen hin soll.</p>
+        <div class="spotrow">
+          <button type="button" class="btn" id="flagGps">Meine Position</button>
+        </div>
+        <span class="hint" id="flagHint"></span>
+      </div>
+
+      <label class="field"><span class="label">Beschriftung</span>
+        <input type="text" id="flagLabel" maxlength="60" required autocomplete="off" placeholder="z. B. Slip am Pier"></label>
+
+      <fieldset class="field kindset">
+        <legend class="label">Art</legend>
+        <div class="kinds" id="flagKinds"></div>
+      </fieldset>
+
+      <label class="field"><span class="label">Notiz</span>
+        <textarea id="flagNote" maxlength="280" placeholder="z. B. Felsen knapp unter der Oberfläche"></textarea></label>
+
+      <p class="msg" id="flagErr" role="alert" hidden></p>
+      <div class="actions">
+        <button type="submit" class="btn primary" id="flagSave">Fähnchen setzen</button>
+        <button type="button" class="btn" id="flagCancel">Abbrechen</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn danger" id="flagDel" hidden>Löschen</button>
+      </div>
+    </form>
+
     <datalist id="dlWater"></datalist>
     <datalist id="dlAngler"></datalist>
     <datalist id="dlLure"></datalist>
@@ -247,8 +284,8 @@
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/supabase.js"></script>
-<script src="js/config.js?v=3"></script>
-<script src="js/loughs.js?v=3"></script>
-<script src="js/app.js?v=3"></script>
+<script src="js/config.js?v=4"></script>
+<script src="js/loughs.js?v=4"></script>
+<script src="js/app.js?v=4"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@ double H Fangkarte – das gemeinsame Hecht-Fangbuch für unsere Irland-Touren.
 
 **Adresse:** https://paur15.github.io/hhmap/
 
-Auf einer Luftbildkarte trägt jeder seine Fänge ein: Fangstelle (Tippen auf die Karte, GPS oder Koordinaten aus Google Maps), Länge, Gewicht, Köder, zurückgesetzt ja/nein, Foto und Notiz. Dazu kommen Ortssuche, Rangliste, Meterhechte und Filter nach Jahr und Angler. Neue Fänge erscheinen sofort bei allen.
+Auf einer Luftbildkarte trägt jeder seine Fänge ein: Fangstelle (Tippen auf die Karte, GPS oder Koordinaten aus Google Maps), Länge, Gewicht, Köder, zurückgesetzt ja/nein, Foto und Notiz. Dazu kommen beschriftete Fähnchen (Hotspot, Slipanlage, Untiefe/Felsen, Unterkunft, Parkplatz), Ortssuche, Rangliste, Meterhechte und Filter nach Jahr und Angler. Neue Fänge erscheinen sofort bei allen.
 
 ## Einrichtung (einmalig)
 
@@ -64,4 +64,5 @@ Statische Webseite (HTML/CSS/JavaScript, kein Build-Schritt), gehostet auf GitHu
 | `js/app.js` | Anmeldung, Karte, Fangbuch, Fotos, Gästeliste |
 | `js/config.js` | Supabase-Adresse, öffentliche Schlüssel |
 | `js/loughs.js` | Seen-Daten für den Gewässer-Vorschlag |
-| `supabase/setup.sql` | Tabellen, Zugriffsregeln, Fotospeicher |
+| `supabase/setup.sql` | Tabellen, Zugriffsregeln, Fotospeicher (vollständig) |
+| `supabase/002_faehnchen.sql` | Nachrüstung der Fähnchen-Tabelle für bestehende Installationen |
