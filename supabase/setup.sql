@@ -302,4 +302,7 @@ end;
 $$;
 
 
+-- Datenschnittstelle sofort über neue Tabellen informieren
+notify pgrst, 'reload schema';
+
 -- Fertig. Ergebnis "Success. No rows returned" ist richtig.
