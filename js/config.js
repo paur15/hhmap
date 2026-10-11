@@ -13,10 +13,10 @@ window.HK_CONFIG = {
      lat/lng = Breite/Länge (z. B. aus Google Maps), eircode und name optional.
      null = keine Homebase anzeigen. */
   homebase: {
-    label: "Homebase",
-    name: "",
+    label: "His Lordship Alex, Keeper of the Leitrim Estate",
+    name: "Homebase",
     eircode: "N41 TD63",
-    lat: null,
-    lng: null
+    lat: 54.057504,
+    lng: -7.691727
   }
 };
