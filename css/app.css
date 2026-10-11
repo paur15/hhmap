@@ -309,3 +309,15 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 .layerpanel legend{padding:0;margin-bottom:4px}
 .layerpanel .check{min-height:36px;font-size:15px;color:var(--ink);cursor:pointer}
 .layerpanel input[type=radio]{width:18px;height:18px;accent-color:var(--accent)}
+
+/* Wer ist online? */
+.onlinewrap{position:relative;margin-top:6px}
+.online{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:transparent;font-size:13px;font-weight:600;cursor:pointer;color:var(--ink)}
+.online:hover{border-color:var(--muted)}
+.odot{width:8px;height:8px;border-radius:50%;background:#2FB45A;box-shadow:0 0 0 0 rgba(47,180,90,.5);animation:pulse 2.4s ease-out infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(47,180,90,.55)}70%{box-shadow:0 0 0 7px rgba(47,180,90,0)}100%{box-shadow:0 0 0 0 rgba(47,180,90,0)}}
+.onlinepop{position:absolute;left:0;top:calc(100% + 6px);z-index:1200;min-width:220px;max-width:280px;background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.onlinepop p{margin:0}
+.onlinepop ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.onlinepop li{display:flex;align-items:center;gap:8px;font-weight:600;overflow-wrap:anywhere}
+.onlinepop li .you{color:var(--muted);font-weight:400;font-size:13px}

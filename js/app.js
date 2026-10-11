@@ -144,6 +144,8 @@ $("authForm").addEventListener("submit", async ev => {
 
 async function logout() {
   closeMenu();
+  stopPresence();
+  if (state.email && presenceOk) { try { await sb.from("presence").delete().eq("email", state.email); } catch (e) { /* ignore */ } }
   try { await sb.auth.signOut(); } catch (e) { /* ignore */ }
   teardown(); setMode(false); show("authScreen");
 }
@@ -206,11 +208,13 @@ async function enter() {
   map.invalidateSize();
   await reload();
   subscribe();
+  startPresence();
 }
 
 function teardown() {
   if (channel) { sb.removeChannel(channel); channel = null; }
   if (spotChannel) { sb.removeChannel(spotChannel); spotChannel = null; }
+  stopPresence(); state.online = []; $("onlineBtn").hidden = true; $("onlinePop").hidden = true;
   if (state.formOpen) closeForm();
   if (state.flagOpen) closeFlagForm();
   state.spots = [];
@@ -289,7 +293,7 @@ function subscribe() {
     .subscribe();
 }
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && state.session && !$("appScreen").hidden) scheduleReload();
+  if (!document.hidden && state.session && !$("appScreen").hidden) { scheduleReload(); heartbeat(); }
 });
 
 async function refreshPhotoUrls() {
@@ -798,7 +802,7 @@ function openForm(c) {
   $("saveBtn").textContent = c ? "Änderungen speichern" : "Fang speichern";
   $("delBtn").hidden = !c; $("delBtn").textContent = "Löschen"; delArmed = false;
   setMsg("formErr", "");
-  $("fAnglerIn").value = c ? c.angler : (lsGet("hk-angler") || "");
+  $("fAnglerIn").value = c ? c.angler : (lsGet("hk-angler") || lsGet("hk-name") || "");
   $("fDate").value = c ? (c.date || today()) : today();
   $("fWater").value = c ? c.water : "";
   $("fLen").value = c && c.len ? c.len : "";
@@ -1208,6 +1212,82 @@ $("flagDel").addEventListener("click", async () => {
     closeFlagForm(); await reload();
   } catch (e) { setMsg("flagErr", explainDb(e)); }
   finally { b.disabled = false; }
+});
+
+/* ---------------------------------------------------------------- Wer ist online? */
+let presenceTimer = null, presenceOk = true;
+state.online = [];
+function myName() { return (lsGet("hk-name") || state.email.split("@")[0] || "Angler").trim().slice(0, 40) || "Angler"; }
+function presenceMissing(e) { return e && (e.code === "42P01" || e.code === "PGRST205" || /presence|online_now/i.test(e.message || "")); }
+async function heartbeat() {
+  if (!state.session || !presenceOk || document.hidden || $("appScreen").hidden) return;
+  try {
+    const { error } = await sb.from("presence").upsert({ email: state.email, name: myName() }, { onConflict: "email" });
+    if (error) {
+      if (presenceMissing(error)) {
+        presenceOk = false; stopPresence(); $("onlineBtn").hidden = true;
+        if (state.isAdmin && !noticeKind) showNotice("Für die Online-Anzeige fehlt noch eine Datenbank-Tabelle. Führe einmal supabase/004_online.sql im SQL-Editor von Supabase aus.", false, "presence");
+      }
+      return;
+    }
+    await refreshOnline();
+  } catch (e) { /* offline – nächster Versuch beim nächsten Takt */ }
+}
+async function refreshOnline() {
+  if (!presenceOk) return;
+  const { data, error } = await sb.from("online_now").select("name,email").order("name");
+  if (error || !data) return;
+  state.online = data;
+  renderOnline();
+}
+function renderOnline() {
+  const list = state.online || [];
+  const n = list.length;
+  $("onlineBtn").hidden = !n;
+  $("onlineTxt").textContent = n + " online";
+  const ul = $("onlineList"); ul.textContent = "";
+  list.forEach(o => {
+    const li = el("li"); li.append(el("i", "odot"), el("span", null, o.name || "Angler"));
+    if ((o.email || "").toLowerCase() === state.email) li.append(el("span", "you", "(du)"));
+    ul.append(li);
+  });
+}
+let onlineTick = 0;
+function startPresence() {
+  stopPresence();
+  if (!presenceOk) return;
+  heartbeat();
+  // alle 15 s prüfen: Online-Liste alle 30 s, eigene Meldung alle 45 s
+  presenceTimer = setInterval(() => {
+    onlineTick++;
+    if (onlineTick % 3 === 0) heartbeat();
+    else if (onlineTick % 2 === 0 && !document.hidden) refreshOnline();
+  }, 15000);
+}
+function stopPresence() { clearInterval(presenceTimer); presenceTimer = null; onlineTick = 0; }
+
+$("onlineBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  const open = $("onlinePop").hidden;
+  $("onlinePop").hidden = !open; $("onlineBtn").setAttribute("aria-expanded", String(open));
+  if (open) refreshOnline();
+});
+document.addEventListener("click", e => {
+  if (!$("onlinePop").hidden && !e.target.closest(".onlinewrap")) { $("onlinePop").hidden = true; $("onlineBtn").setAttribute("aria-expanded", "false"); }
+});
+
+$("menuName").addEventListener("click", () => {
+  closeMenu(); $("nameIn").value = myName(); setMsg("nameMsg", "");
+  $("nameDlg").showModal();
+});
+$("nameForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const n = $("nameIn").value.trim().slice(0, 40);
+  if (!n) return setMsg("nameMsg", "Bitte einen Namen eingeben.");
+  lsSet("hk-name", n);
+  setMsg("nameMsg", "Gespeichert.", true);
+  await heartbeat();
+  setTimeout(() => $("nameDlg").close(), 900);
 });
 
 /* ---------------------------------------------------------------- Export */

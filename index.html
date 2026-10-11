@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hechtkarte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/app.css?v=10">
+<link rel="stylesheet" href="css/app.css?v=11">
 </head>
 <body>
 
@@ -117,6 +117,16 @@
       <div class="brand">
         <h1>Hechtkarte Irland</h1>
         <p class="sub" id="sub">Unser gemeinsames Fangbuch</p>
+        <div class="onlinewrap">
+          <button type="button" class="online" id="onlineBtn" hidden aria-expanded="false" aria-controls="onlinePop">
+            <i class="odot" aria-hidden="true"></i><span id="onlineTxt">online</span>
+          </button>
+          <div class="onlinepop" id="onlinePop" hidden>
+            <p class="label">Gerade online</p>
+            <ul id="onlineList"></ul>
+            <p class="hint">Aktualisiert sich alle 30 Sekunden.</p>
+          </div>
+        </div>
       </div>
       <div class="headactions">
         <button type="button" id="addBtn" class="btn primary">Fang eintragen</button>
@@ -126,6 +136,7 @@
           </summary>
           <div class="menupop">
             <p class="menuwho"><span class="label">Angemeldet als</span><span id="meEmail"></span></p>
+            <button type="button" class="menuitem" id="menuName">Mein Name</button>
             <button type="button" class="menuitem" id="menuMembers" hidden>Gästeliste verwalten</button>
             <button type="button" class="menuitem" id="menuPw">Passwort ändern</button>
             <button type="button" class="menuitem" id="menuLogout">Abmelden</button>
@@ -319,6 +330,21 @@
   <p class="msg" id="exportMsg" role="status" hidden></p>
 </dialog>
 
+<!-- Mein Name -->
+<dialog id="nameDlg" class="dlg" aria-labelledby="nameTitle">
+  <form method="dialog" class="dlghead">
+    <h2 id="nameTitle">Mein Name</h2>
+    <button class="btn icon" aria-label="Schließen" value="close">✕</button>
+  </form>
+  <form id="nameForm" class="stack" novalidate>
+    <p class="muted">So sehen dich die anderen in der Online-Anzeige. Er wird auch als Angler vorgeschlagen, wenn du einen Fang einträgst.</p>
+    <label class="field"><span class="label">Name</span>
+      <input type="text" id="nameIn" maxlength="40" autocomplete="nickname" required></label>
+    <p class="msg" id="nameMsg" role="alert" hidden></p>
+    <button type="submit" class="btn primary">Speichern</button>
+  </form>
+</dialog>
+
 <!-- Passwort ändern -->
 <dialog id="pwDlg" class="dlg" aria-labelledby="pwTitle">
   <form method="dialog" class="dlghead">
@@ -337,8 +363,8 @@
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/supabase.js"></script>
-<script src="js/config.js?v=10"></script>
-<script src="js/loughs.js?v=10"></script>
-<script src="js/app.js?v=10"></script>
+<script src="js/config.js?v=11"></script>
+<script src="js/loughs.js?v=11"></script>
+<script src="js/app.js?v=11"></script>
 </body>
 </html>
