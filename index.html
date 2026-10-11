@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hechtkarte Irland</title>
+<meta name="description" content="Gemeinsames Fangbuch unserer Hecht-Truppe für Irland">
+<meta name="theme-color" content="#44602A" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101613" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Hechtkarte">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- Startbildschirm -->
+<div id="splash" class="screen splash" role="status">
+  <p class="wordmark">Hechtkarte Irland</p>
+  <p class="muted">Lädt …</p>
+</div>
+
+<!-- Anmeldung -->
+<section id="authScreen" class="screen auth" hidden>
+  <div class="authcard">
+    <p class="wordmark">Hechtkarte Irland</p>
+    <p class="muted">Das Fangbuch unserer Truppe. Nur für eingeladene Angler.</p>
+
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tabLogin" class="tab" aria-selected="true">Anmelden</button>
+      <button type="button" role="tab" id="tabSignup" class="tab" aria-selected="false">Registrieren</button>
+    </div>
+
+    <form id="authForm" class="stack" novalidate>
+      <label class="field"><span class="label">E-Mail</span>
+        <input type="email" id="authEmail" autocomplete="email" required inputmode="email"></label>
+      <label class="field"><span class="label">Passwort</span>
+        <input type="password" id="authPw" autocomplete="current-password" required minlength="8"></label>
+      <label class="field" id="authPw2Wrap" hidden><span class="label">Passwort wiederholen</span>
+        <input type="password" id="authPw2" autocomplete="new-password" minlength="8"></label>
+      <p class="hint" id="authHint" hidden>Mindestens 8 Zeichen. Registriere dich mit der Adresse, die auf der Gästeliste steht.</p>
+      <p class="msg" id="authMsg" role="alert" hidden></p>
+      <button type="submit" class="btn primary wide" id="authSubmit">Anmelden</button>
+    </form>
+
+    <details class="forgot">
+      <summary>Passwort vergessen?</summary>
+      <p>Sag dem Verwalter der Karte Bescheid. Er löscht dein Konto in Supabase, danach registrierst du dich mit derselben Adresse neu. Deine Fänge bleiben erhalten.</p>
+    </details>
+  </div>
+</section>
+
+<!-- Freischaltung / Einrichtung -->
+<section id="gateScreen" class="screen auth" hidden>
+  <div class="authcard">
+    <p class="wordmark">Hechtkarte Irland</p>
+    <h1 id="gateTitle">Noch nicht freigeschaltet</h1>
+    <p id="gateText"></p>
+    <p class="msg" id="gateMsg" role="alert" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn primary" id="gatePrimary">Erneut prüfen</button>
+      <button type="button" class="btn" id="gateLogout">Abmelden</button>
+    </div>
+  </div>
+</section>
+
+<!-- App -->
+<div id="appScreen" class="app" hidden>
+  <div class="mapwrap">
+    <div id="map" aria-label="Karte mit den eingetragenen Hechtfängen"></div>
+    <div id="maphint" class="maphint" hidden>Tippe auf die Karte, wo der Hecht gebissen hat</div>
+    <div class="legend" aria-hidden="true">
+      <span><i class="s"></i><i class="l"></i>Kreisgröße = Länge</span>
+      <span><i class="g"></i>Meterhecht (ab 100 cm)</span>
+    </div>
+  </div>
+
+  <aside class="panel" aria-label="Fangbuch">
+    <header class="head">
+      <div class="brand">
+        <h1>Hechtkarte Irland</h1>
+        <p class="sub" id="sub">Unser gemeinsames Fangbuch</p>
+      </div>
+      <div class="headactions">
+        <button type="button" id="addBtn" class="btn primary">Fang eintragen</button>
+        <details class="menu" id="menu">
+          <summary class="btn icon" aria-label="Konto und Einstellungen">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </summary>
+          <div class="menupop">
+            <p class="menuwho"><span class="label">Angemeldet als</span><span id="meEmail"></span></p>
+            <button type="button" class="menuitem" id="menuMembers" hidden>Gästeliste verwalten</button>
+            <button type="button" class="menuitem" id="menuPw">Passwort ändern</button>
+            <button type="button" class="menuitem" id="menuLogout">Abmelden</button>
+          </div>
+        </details>
+      </div>
+    </header>
+
+    <div id="notice" class="notice" role="status" hidden></div>
+
+    <div id="viewList">
+      <div class="section">
+        <div class="filters">
+          <label class="field"><span class="label">Jahr</span>
+            <select id="fYear"><option value="all">Alle Jahre</option></select></label>
+          <label class="field"><span class="label">Angler</span>
+            <select id="fAngler"><option value="all">Alle</option></select></label>
+        </div>
+        <div class="stats">
+          <div class="stat"><span class="num" id="sCount">0</span><span class="cap">Hechte</span></div>
+          <div class="stat"><span class="num" id="sMax">–</span><span class="cap" id="sMaxWho">Größter</span></div>
+          <div class="stat gold"><span class="num" id="sMeter">0</span><span class="cap">Meterhechte</span></div>
+        </div>
+        <div class="board" id="board" hidden>
+          <h2>Rangliste</h2>
+          <table><tbody id="boardBody"></tbody></table>
+        </div>
+      </div>
+      <div class="section tight">
+        <div class="listhead"><h2>Fänge</h2><span id="listCount"></span></div>
+        <ol class="list" id="list"></ol>
+        <div class="empty" id="empty"><strong>Fänge werden geladen …</strong></div>
+      </div>
+    </div>
+
+    <form id="form" class="form" hidden novalidate>
+      <h2 id="formTitle">Neuer Fang</h2>
+
+      <div class="spot" id="spot">
+        <span class="label">Fangstelle</span>
+        <p id="spotText">Tippe auf die Karte, nimm deine Position oder füge Koordinaten aus Google Maps ein.</p>
+        <div class="spotrow">
+          <input type="text" id="fCoords" inputmode="decimal" autocomplete="off" placeholder="z. B. 53.4512, -9.2456" aria-label="Koordinaten der Fangstelle">
+          <button type="button" class="btn" id="gpsBtn">Meine Position</button>
+        </div>
+        <span class="hint" id="coordHint"></span>
+      </div>
+
+      <label class="field"><span class="label">Gewässer</span>
+        <input type="text" id="fWater" list="dlWater" maxlength="60" placeholder="z. B. Lough Corrib" autocomplete="off"></label>
+
+      <div class="grid2">
+        <label class="field"><span class="label">Angler</span>
+          <input type="text" id="fAnglerIn" list="dlAngler" maxlength="40" required autocomplete="off"></label>
+        <label class="field"><span class="label">Datum</span>
+          <input type="date" id="fDate" required></label>
+      </div>
+
+      <div class="grid2">
+        <label class="field"><span class="label">Länge (cm)</span>
+          <input type="number" id="fLen" min="20" max="160" step="1" inputmode="numeric" required placeholder="z. B. 86"></label>
+        <label class="field"><span class="label">Gewicht (kg)</span>
+          <input type="number" id="fKg" min="0.2" max="30" step="0.1" inputmode="decimal" placeholder="optional">
+          <span class="hint" id="lbHint"></span></label>
+      </div>
+
+      <label class="field"><span class="label">Köder</span>
+        <input type="text" id="fLure" list="dlLure" maxlength="40" placeholder="z. B. Gummifisch 20 cm" autocomplete="off"></label>
+
+      <label class="check"><input type="checkbox" id="fReleased" checked> Zurückgesetzt</label>
+
+      <div class="field">
+        <span class="label">Foto</span>
+        <div class="photo" id="photoBox">
+          <img id="photoPreview" alt="Vorschau des Fangfotos" hidden>
+          <div class="photoactions">
+            <label class="btn" for="fPhoto" id="photoPick">Foto wählen</label>
+            <input type="file" id="fPhoto" accept="image/*" class="visually-hidden">
+            <button type="button" class="btn" id="photoRemove" hidden>Foto entfernen</button>
+          </div>
+        </div>
+        <span class="hint" id="photoHint"></span>
+      </div>
+
+      <label class="field"><span class="label">Notiz</span>
+        <textarea id="fNote" maxlength="280" placeholder="Wetter, Tiefe, Drill …"></textarea></label>
+
+      <p class="msg" id="formErr" role="alert" hidden></p>
+      <div class="actions">
+        <button type="submit" class="btn primary" id="saveBtn">Fang speichern</button>
+        <button type="button" class="btn" id="cancelBtn">Abbrechen</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn danger" id="delBtn" hidden>Löschen</button>
+      </div>
+    </form>
+
+    <datalist id="dlWater"></datalist>
+    <datalist id="dlAngler"></datalist>
+    <datalist id="dlLure"></datalist>
+  </aside>
+</div>
+
+<!-- Gästeliste -->
+<dialog id="membersDlg" class="dlg" aria-labelledby="membersTitle">
+  <form method="dialog" class="dlghead">
+    <h2 id="membersTitle">Gästeliste</h2>
+    <button class="btn icon" aria-label="Schließen" value="close">✕</button>
+  </form>
+  <p class="muted">Nur Adressen auf dieser Liste sehen die Karte und können Fänge eintragen. Schick deinen Kollegen danach den Link; sie registrieren sich mit genau dieser Adresse.</p>
+  <form id="memberAdd" class="memberadd" novalidate>
+    <input type="email" id="memberEmail" placeholder="name@beispiel.de" autocomplete="off" aria-label="E-Mail-Adresse hinzufügen" required>
+    <button type="submit" class="btn primary">Hinzufügen</button>
+  </form>
+  <label class="check small"><input type="checkbox" id="memberAdmin"> Als Verwalter hinzufügen</label>
+  <p class="msg" id="memberMsg" role="alert" hidden></p>
+  <ul class="members" id="memberList"></ul>
+  <div class="sharebox">
+    <span class="label">Link für die Gruppe</span>
+    <div class="spotrow">
+      <input type="text" id="shareUrl" readonly aria-label="Link zur Karte">
+      <button type="button" class="btn" id="copyUrl">Kopieren</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- Passwort ändern -->
+<dialog id="pwDlg" class="dlg" aria-labelledby="pwTitle">
+  <form method="dialog" class="dlghead">
+    <h2 id="pwTitle">Passwort ändern</h2>
+    <button class="btn icon" aria-label="Schließen" value="close">✕</button>
+  </form>
+  <form id="pwForm" class="stack" novalidate>
+    <label class="field"><span class="label">Neues Passwort</span>
+      <input type="password" id="pwNew" autocomplete="new-password" minlength="8" required></label>
+    <label class="field"><span class="label">Wiederholen</span>
+      <input type="password" id="pwNew2" autocomplete="new-password" minlength="8" required></label>
+    <p class="msg" id="pwMsg" role="alert" hidden></p>
+    <button type="submit" class="btn primary">Speichern</button>
+  </form>
+</dialog>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/loughs.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
