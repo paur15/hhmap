@@ -97,7 +97,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 
 .section{padding:16px 20px;display:flex;flex-direction:column;gap:14px}
 .section.tight{padding-top:0}
-.filters{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .stat{padding:12px 0 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
 .stat + .stat{border-left:1px solid var(--line);padding-left:14px}
@@ -112,7 +112,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 .board td.rank{width:26px;color:var(--muted);font-family:var(--f-mono);font-size:12px}
 .board td.name{font-weight:600;overflow-wrap:anywhere}
 .board td.n{text-align:right;white-space:nowrap;color:var(--muted)}
-.board td.best{width:72px;text-align:right;white-space:nowrap;font-weight:600}
+.board td.best{width:auto;padding-left:12px;text-align:right;white-space:nowrap;font-weight:600}
 
 .listhead{display:flex;align-items:baseline;justify-content:space-between}
 .listhead span{font-size:13px;color:var(--muted)}
@@ -147,7 +147,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 
 /* Map */
 .leaflet-container{background:var(--sea);font-family:var(--f-body)}
-.pin{fill:var(--lure);fill-opacity:.95;stroke:var(--pin-edge);stroke-width:1.5}
+.pin{fill:var(--spc,var(--lure));fill-opacity:.95;stroke:var(--pin-edge);stroke-width:1.5}
 .pin-gold{stroke:var(--gold-ring);stroke-width:3.5}
 .pin-sel{stroke-width:3;fill-opacity:1}
 .draft{position:relative;width:34px;height:34px}
@@ -276,3 +276,15 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 .castle-label{position:absolute;left:50%;top:51px;transform:translateX(-50%);width:max-content;max-width:210px;white-space:normal;text-align:center;line-height:1.15;background:#2A2118;color:#F2E6C9;border:1px solid #C9A85A;font-family:var(--f-display);font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:4px;pointer-events:none}
 .z-lo .castle-label{display:none}
 .castle-sw{background:#E9DFC7;box-shadow:inset 0 0 0 1.5px #2A2118}
+
+/* Fischarten */
+:root{--sp-hecht:#DE6824;--sp-barsch:#8DB600;--sp-aal:#3D8FC4;--sp-other:#C9C6B8}
+.sp-hecht{--spc:var(--sp-hecht)}
+.sp-barsch{--spc:var(--sp-barsch)}
+.sp-aal{--spc:var(--sp-aal)}
+.sp-other{--spc:var(--sp-other)}
+.spdot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--spc);box-shadow:inset 0 0 0 1px rgba(0,0,0,.35);margin-right:5px;vertical-align:1px}
+.spsw{background:var(--spc)}
+.legend i.sp{width:11px;height:11px;background:var(--spc);vertical-align:-1px}
+#fSpeciesOtherWrap{margin-top:8px}
+@media (max-width:380px){.filters{grid-template-columns:1fr 1fr}}

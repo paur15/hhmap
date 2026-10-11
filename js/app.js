@@ -15,7 +15,7 @@ const sb = window.supabase.createClient(CFG.supabaseUrl, CFG.supabaseKey, {
 
 const state = {
   session: null, email: "", isAdmin: false,
-  catches: [], loaded: false, year: "all", angler: "all", sel: null,
+  catches: [], loaded: false, year: "all", angler: "all", species: "all", speciesMissing: false, sel: null,
   editing: null, formOpen: false, draft: null, waterAuto: true, saving: false,
   photoFile: null, photoRemoved: false, photoUrls: new Map(), photoUrlsAt: 0,
   firstFit: false, signup: false,
@@ -24,6 +24,15 @@ const state = {
 
 const LURES = ["Gummifisch", "Jerkbait", "Wobbler", "Spinner", "Blinker", "Spinnerbait", "Swimbait", "Köderfisch", "Hechtfliege", "Twitchbait"];
 const IRELAND = [[51.40, -10.62], [55.40, -5.45]];
+const SPECIES = [
+  { k: "hecht", t: "Hecht", en: "Pike", pl: "Hechte" },
+  { k: "barsch", t: "Barsch", en: "Perch", pl: "Barsche" },
+  { k: "aal", t: "Aal", en: "Eel", pl: "Aale" }
+];
+const SPECIES_BY = Object.fromEntries(SPECIES.map(x => [x.k, x]));
+function speciesName(k) { return SPECIES_BY[k] ? SPECIES_BY[k].t : (k || "Hecht"); }
+function speciesClass(k) { return SPECIES_BY[k] ? "sp-" + k : "sp-other"; }
+function isMeterhecht(c) { return c.species === "hecht" && c.len >= 100; }
 
 /* ---------------------------------------------------------------- helpers */
 const nf1 = new Intl.NumberFormat("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -48,6 +57,7 @@ function fromRow(r) {
   const kg = r.weight_kg == null ? null : Number(r.weight_kg);
   return {
     id: r.id, owner: (r.owner_email || "").toLowerCase(), angler: r.angler || "Unbekannt",
+    species: (typeof r.species === "string" && r.species.trim()) ? r.species.trim() : "hecht",
     date: r.caught_on || "", water: r.water || "", lat, lng,
     len: r.length_cm ? Number(r.length_cm) : null, kg: kg && kg > 0 ? kg : null,
     lure: r.lure || "", released: r.released !== false, note: r.note || "",
@@ -227,13 +237,17 @@ function spotFromRow(r) {
   return { id: r.id, owner: (r.owner_email || "").toLowerCase(), label: r.label || "Fähnchen",
     kind: KIND_BY[r.kind] ? r.kind : "sonstiges", note: r.note || "", lat, lng };
 }
+const CATCH_COLS = "id,owner_email,angler,caught_on,water,lat,lng,length_cm,weight_kg,lure,released,note,photo_path,created_at";
+function catchQuery(withSpecies) {
+  return sb.from("catches")
+    .select(withSpecies ? CATCH_COLS + ",species" : CATCH_COLS)
+    .order("caught_on", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(5000);
+}
 async function reload() {
-  const [cres, sres] = await Promise.all([
-    sb.from("catches")
-      .select("id,owner_email,angler,caught_on,water,lat,lng,length_cm,weight_kg,lure,released,note,photo_path,created_at")
-      .order("caught_on", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(5000),
+  let [cres, sres] = await Promise.all([
+    catchQuery(!state.speciesMissing),
     sb.from("spots").select("id,owner_email,label,kind,note,lat,lng,created_at").order("label").limit(2000)
   ]);
   if (sres.error) {
@@ -247,6 +261,12 @@ async function reload() {
     state.spots = (sres.data || []).map(spotFromRow).filter(Boolean);
     if (!spotChannel) subscribeSpots();
   }
+  if (cres.error && !state.speciesMissing && (cres.error.code === "42703" || /species/i.test(cres.error.message || ""))) {
+    state.speciesMissing = true;
+    cres = await catchQuery(false);
+  }
+  if (state.speciesMissing && state.isAdmin && !cres.error)
+    showNotice("Für die Fischarten fehlt noch eine Datenbank-Spalte. Führe einmal supabase/003_fischarten.sql im SQL-Editor von Supabase aus.", false, "species");
   const { data, error } = cres;
   if (error) {
     state.loaded = true; render();
@@ -516,13 +536,14 @@ function popupEl(c) {
   const url = c.photo && state.photoUrls.get(c.photo);
   if (url) {
     const a = el("a"); a.href = url; a.target = "_blank"; a.rel = "noopener";
-    const img = el("img"); img.src = url; img.alt = "Foto: " + (c.len ? c.len + " cm Hecht" : "Hecht") + " von " + c.angler; img.loading = "lazy";
+    const img = el("img"); img.src = url; img.alt = "Foto: " + (c.len ? c.len + " cm " : "") + speciesName(c.species) + " von " + c.angler; img.loading = "lazy";
     a.append(img); d.append(a);
   }
   const top = el("div", "top");
   const big = el("span", "big", c.len ? String(c.len) : "–"); if (c.len) big.append(el("small", null, " cm"));
   top.append(big);
-  if (c.len >= 100) top.append(el("span", "badge", "Meterhecht"));
+  const spc = el("span", "w " + speciesClass(c.species)); spc.append(el("i", "spdot"), speciesName(c.species)); top.append(spc);
+  if (isMeterhecht(c)) top.append(el("span", "badge", "Meterhecht"));
   if (c.kg) top.append(el("span", "w", fmtKg(c.kg) + " · " + lbOz(c.kg)));
   d.append(top);
   const dl = el("dl");
@@ -549,7 +570,8 @@ function popupEl(c) {
 function filtered() {
   return state.catches.filter(c =>
     (state.year === "all" || c.date.slice(0, 4) === state.year) &&
-    (state.angler === "all" || c.angler === state.angler));
+    (state.angler === "all" || c.angler === state.angler) &&
+    (state.species === "all" || c.species === state.species));
 }
 function fillSelect(sel, values, allLabel, current) {
   const keep = values.includes(current) ? current : "all";
@@ -565,6 +587,15 @@ function render() {
   const anglers = [...new Set(state.catches.map(c => c.angler))].sort((a, b) => a.localeCompare(b, "de"));
   state.year = fillSelect($("fYear"), years, "Alle Jahre", state.year);
   state.angler = fillSelect($("fAngler"), anglers, "Alle", state.angler);
+  const present = [...new Set(state.catches.map(c => c.species))];
+  const spKeys = [...SPECIES.map(x => x.k).filter(k => present.includes(k)), ...present.filter(k => !SPECIES_BY[k]).sort((a, b) => a.localeCompare(b, "de"))];
+  const fs = $("fSpecies");
+  if (!spKeys.includes(state.species)) state.species = "all";
+  fs.textContent = "";
+  const o0 = el("option", null, "Alle Arten"); o0.value = "all"; fs.append(o0);
+  spKeys.forEach(k => { const o = el("option", null, speciesName(k)); o.value = k; fs.append(o); });
+  fs.value = state.species;
+  fillDatalist($("dlSpecies"), [...new Set(state.catches.map(c => c.species).filter(k => !SPECIES_BY[k]).concat(["Brasse", "Rotauge", "Rotfeder", "Forelle", "Schleie"]))]);
   fillDatalist($("dlAngler"), anglers);
   const waters = new Set([...LOUGHS.lakes.map(l => l.n), ...LOUGHS.small.map(s => s[0]), "River Shannon", "River Erne", ...state.catches.map(c => c.water).filter(Boolean)]);
   fillDatalist($("dlWater"), [...waters].sort((a, b) => a.localeCompare(b, "de")));
@@ -572,23 +603,31 @@ function render() {
 
   const list = filtered();
   const lens = list.filter(c => c.len);
+  const allSp = state.species === "all";
   $("sCount").textContent = String(list.length);
+  $("sCountCap").textContent = allSp ? "Fänge" : (SPECIES_BY[state.species] ? SPECIES_BY[state.species].pl : speciesName(state.species));
   const max = lens.reduce((m, c) => (!m || c.len > m.len) ? c : m, null);
   const sMax = $("sMax"); sMax.textContent = "";
-  if (max) { sMax.append(String(max.len), el("small", null, "cm")); $("sMaxWho").textContent = "Größter · " + max.angler; }
+  if (max) { sMax.append(String(max.len), el("small", null, "cm")); $("sMaxWho").textContent = (allSp ? "Größter " + speciesName(max.species) : "Größter") + " · " + max.angler; }
   else { sMax.textContent = "–"; $("sMaxWho").textContent = "Größter"; }
-  $("sMeter").textContent = String(lens.filter(c => c.len >= 100).length);
+  $("sMeter").textContent = String(list.filter(isMeterhecht).length);
   const nAng = new Set(state.catches.map(c => c.angler)).size;
   $("sub").textContent = state.catches.length ? (state.catches.length + (state.catches.length === 1 ? " Fang" : " Fänge") + " von " + nAng + " Angler" + (nAng === 1 ? "" : "n")) : "Unser gemeinsames Fangbuch";
 
   const by = new Map();
-  list.forEach(c => { const r = by.get(c.angler) || { n: 0, best: 0 }; r.n++; r.best = Math.max(r.best, c.len || 0); by.set(c.angler, r); });
-  const rows = [...by.entries()].sort((a, b) => b[1].best - a[1].best || b[1].n - a[1].n).slice(0, 8);
+  list.forEach(c => {
+    const r = by.get(c.angler) || { n: 0, best: 0, bestSp: "" }; r.n++;
+    if ((c.len || 0) > r.best) { r.best = c.len || 0; r.bestSp = c.species; }
+    by.set(c.angler, r);
+  });
+  const rows = [...by.entries()].sort(allSp
+    ? (a, b) => b[1].n - a[1].n || b[1].best - a[1].best
+    : (a, b) => b[1].best - a[1].best || b[1].n - a[1].n).slice(0, 8);
   $("board").hidden = rows.length < 2;
   const tb = $("boardBody"); tb.textContent = "";
   rows.forEach(([name, r], i) => {
     const tr = el("tr");
-    tr.append(el("td", "rank", String(i + 1)), el("td", "name", name), el("td", "n", r.n + (r.n === 1 ? " Fang" : " Fänge")), el("td", "best", r.best ? r.best + " cm" : "–"));
+    tr.append(el("td", "rank", String(i + 1)), el("td", "name", name), el("td", "n", r.n + (r.n === 1 ? " Fang" : " Fänge")), el("td", "best", r.best ? r.best + " cm" + (allSp ? " " + speciesName(r.bestSp) : "") : "–"));
     tb.append(tr);
   });
 
@@ -599,9 +638,10 @@ function render() {
     const len = el("span", "len", c.len ? String(c.len) : "–"); if (c.len) len.append(el("small", null, "cm"));
     const meta = el("span", "meta");
     const who = el("span", "who", c.angler); if (c.water) who.append(el("span", null, " · " + c.water));
-    const det = [fmtDate(c.date), c.lure, c.kg ? fmtKg(c.kg) : "", c.released ? "" : "entnommen", c.photo ? "mit Foto" : ""].filter(Boolean).join(" · ");
-    meta.append(who, el("span", "det", det));
-    b.append(len, meta, c.len >= 100 ? el("span", "badge", "Meterhecht") : el("span"));
+    const det = [speciesName(c.species), fmtDate(c.date), c.lure, c.kg ? fmtKg(c.kg) : "", c.released ? "" : "entnommen", c.photo ? "mit Foto" : ""].filter(Boolean).join(" · ");
+    const detEl = el("span", "det " + speciesClass(c.species)); detEl.append(el("i", "spdot"), det);
+    meta.append(who, detEl);
+    b.append(len, meta, isMeterhecht(c) ? el("span", "badge", "Meterhecht") : el("span"));
     b.addEventListener("click", () => focusCatch(c.id, true));
     li.append(b); ol.append(li);
   });
@@ -610,7 +650,7 @@ function render() {
   const empty = $("empty"); empty.textContent = "";
   if (!state.loaded) { empty.append(el("strong", null, "Fänge werden geladen …")); empty.hidden = false; }
   else if (!state.catches.length) {
-    empty.append(el("strong", null, "Noch kein Hecht im Buch"),
+    empty.append(el("strong", null, "Noch kein Fang im Buch"),
       el("span", null, "Tippe auf „Fang eintragen“ und setz die Fangstelle auf der Karte. Jeder Fang erscheint sofort bei allen."));
     empty.hidden = false;
   } else if (!list.length) { empty.append(el("span", null, "Für diese Auswahl gibt es keine Fänge.")); empty.hidden = false; }
@@ -626,7 +666,7 @@ function renderMarkers(list) {
   markers.forEach((m, id) => { if (m.isPopupOpen()) reopen = id; });
   catchLayer.clearLayers(); markers.clear();
   list.forEach(c => {
-    const cls = "pin" + (c.len >= 100 ? " pin-gold" : "") + (state.sel === c.id ? " pin-sel" : "");
+    const cls = "pin " + speciesClass(c.species) + (isMeterhecht(c) ? " pin-gold" : "") + (state.sel === c.id ? " pin-sel" : "");
     const m = L.circleMarker([c.lat, c.lng], { radius: radius(c.len), className: cls, bubblingMouseEvents: false });
     m.bindPopup(() => popupEl(c), { maxWidth: 280, minWidth: 220, autoPanPadding: [24, 24] });
     m.on("click", () => select(c.id));
@@ -652,6 +692,7 @@ function focusCatch(id, fly) {
 
 $("fYear").addEventListener("change", e => { state.year = e.target.value; render(); });
 $("fAngler").addEventListener("change", e => { state.angler = e.target.value; render(); });
+$("fSpecies").addEventListener("change", e => { state.species = e.target.value; render(); });
 
 /* ---------------------------------------------------------------- form */
 const draftIcon = L.divIcon({ className: "", html: '<div class="draft"></div>', iconSize: [34, 34], iconAnchor: [17, 17] });
@@ -691,10 +732,37 @@ function setPreview(src) {
   else { img.removeAttribute("src"); img.hidden = true; $("photoRemove").hidden = true; $("photoPick").textContent = "Foto wählen"; }
 }
 
+function buildSpeciesChips() {
+  const box = $("fSpeciesChips"); box.textContent = "";
+  [...SPECIES, { k: "andere", t: "Andere", en: "" }].forEach(x => {
+    const lab = el("label", "kind " + (x.k === "andere" ? "sp-other" : "sp-" + x.k));
+    const inp = el("input"); inp.type = "radio"; inp.name = "fSpecies"; inp.value = x.k;
+    inp.addEventListener("change", () => { $("fSpeciesOtherWrap").hidden = x.k !== "andere"; if (x.k === "andere") $("fSpeciesOther").focus(); });
+    lab.append(inp, el("span", "sw spsw"), x.t + (x.en ? " · " + x.en : ""));
+    box.append(lab);
+  });
+}
+buildSpeciesChips();
+function setSpecies(sp) {
+  const known = SPECIES_BY[sp] ? sp : "andere";
+  document.querySelectorAll('input[name="fSpecies"]').forEach(i => { i.checked = i.value === known; });
+  $("fSpeciesOtherWrap").hidden = known !== "andere";
+  $("fSpeciesOther").value = known === "andere" ? (sp || "") : "";
+}
+function getSpecies() {
+  const sel = document.querySelector('input[name="fSpecies"]:checked');
+  if (!sel) return "hecht";
+  if (sel.value !== "andere") return sel.value;
+  const t = $("fSpeciesOther").value.trim().slice(0, 40);
+  const low = t.toLowerCase();
+  const hit = SPECIES.find(x => x.t.toLowerCase() === low || x.en.toLowerCase() === low);
+  return hit ? hit.k : t;
+}
+
 let delArmed = false;
 function openForm(c) {
   if (state.flagOpen) closeFlagForm();
-  $("maphint").textContent = "Tippe auf die Karte, wo der Hecht gebissen hat";
+  $("maphint").textContent = "Tippe auf die Karte, wo der Fisch gebissen hat";
   state.formOpen = true; state.editing = c ? c.id : null;
   $("formTitle").textContent = c ? "Fang bearbeiten" : "Neuer Fang";
   $("saveBtn").textContent = c ? "Änderungen speichern" : "Fang speichern";
@@ -704,6 +772,7 @@ function openForm(c) {
   $("fDate").value = c ? (c.date || today()) : today();
   $("fWater").value = c ? c.water : "";
   $("fLen").value = c && c.len ? c.len : "";
+  setSpecies(c ? c.species : (lsGet("hk-species") || "hecht"));
   $("fKg").value = c && c.kg ? c.kg : "";
   $("fLure").value = c ? c.lure : (lsGet("hk-lure") || "");
   $("fReleased").checked = c ? c.released : true;
@@ -801,7 +870,9 @@ $("form").addEventListener("submit", async ev => {
   const date = $("fDate").value;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Bitte ein Datum wählen.", "fDate");
   const len = parseInt($("fLen").value, 10);
-  if (!(len >= 20 && len <= 160)) return fail("Die Länge muss zwischen 20 und 160 cm liegen.", "fLen");
+  const species = getSpecies();
+  if (!species) return fail("Gib die Fischart ein.", "fSpeciesOther");
+  if (!(len >= 5 && len <= 200)) return fail("Die Länge muss zwischen 5 und 200 cm liegen.", "fLen");
   const kgRaw = $("fKg").value.trim(); const kg = kgRaw ? parseFloat(kgRaw.replace(",", ".")) : null;
   if (kgRaw && !(kg > 0 && kg <= 30)) return fail("Das Gewicht muss zwischen 0,2 und 30 kg liegen.", "fKg");
 
@@ -829,6 +900,7 @@ $("form").addEventListener("submit", async ev => {
       lure: $("fLure").value.trim().slice(0, 40) || null, released: $("fReleased").checked,
       note: $("fNote").value.trim().slice(0, 280) || null, photo_path: photoPath
     };
+    if (!state.speciesMissing) row.species = species;
     const q = state.editing
       ? sb.from("catches").update(row).eq("id", state.editing).select("id").single()
       : sb.from("catches").insert(row).select("id").single();
@@ -836,12 +908,13 @@ $("form").addEventListener("submit", async ev => {
     if (error) throw error;
 
     if (prev && prev.photo && prev.photo !== photoPath) sb.storage.from("photos").remove([prev.photo]).catch(() => {});
-    lsSet("hk-angler", angler); if (row.lure) lsSet("hk-lure", row.lure);
+    lsSet("hk-angler", angler); if (row.lure) lsSet("hk-lure", row.lure); lsSet("hk-species", species);
     const id = data.id;
     state.sel = id;
     closeForm();
     if (state.year !== "all" && date.slice(0, 4) !== state.year) state.year = "all";
     if (state.angler !== "all" && angler !== state.angler) state.angler = "all";
+    if (state.species !== "all" && species !== state.species) state.species = "all";
     await reload();
     focusCatch(id, false);
   } catch (e) {

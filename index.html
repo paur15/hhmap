@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hechtkarte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/app.css?v=6">
+<link rel="stylesheet" href="css/app.css?v=7">
 </head>
 <body>
 
@@ -83,10 +83,14 @@
       </div>
       <ul id="searchResults" class="searchres" hidden></ul>
     </form>
-    <div id="maphint" class="maphint" hidden>Tippe auf die Karte, wo der Hecht gebissen hat</div>
+    <div id="maphint" class="maphint" hidden>Tippe auf die Karte, wo der Fisch gebissen hat</div>
     <div class="legend" aria-hidden="true">
-      <span><i class="s"></i><i class="l"></i>Kreisgröße = Länge</span>
-      <span><i class="g"></i>Meterhecht (ab 100 cm)</span>
+      <span><i class="sp sp-hecht"></i>Hecht</span>
+      <span><i class="sp sp-barsch"></i>Barsch</span>
+      <span><i class="sp sp-aal"></i>Aal</span>
+      <span><i class="sp sp-other"></i>Andere</span>
+      <span><i class="g"></i>Meterhecht</span>
+      <span class="muted">Kreisgröße = Länge</span>
     </div>
   </div>
 
@@ -121,9 +125,11 @@
             <select id="fYear"><option value="all">Alle Jahre</option></select></label>
           <label class="field"><span class="label">Angler</span>
             <select id="fAngler"><option value="all">Alle</option></select></label>
+          <label class="field"><span class="label">Fischart</span>
+            <select id="fSpecies"><option value="all">Alle Arten</option></select></label>
         </div>
         <div class="stats">
-          <div class="stat"><span class="num" id="sCount">0</span><span class="cap">Hechte</span></div>
+          <div class="stat"><span class="num" id="sCount">0</span><span class="cap" id="sCountCap">Fänge</span></div>
           <div class="stat"><span class="num" id="sMax">–</span><span class="cap" id="sMaxWho">Größter</span></div>
           <div class="stat gold"><span class="num" id="sMeter">0</span><span class="cap">Meterhechte</span></div>
         </div>
@@ -147,6 +153,13 @@
     <form id="form" class="form" hidden novalidate>
       <h2 id="formTitle">Neuer Fang</h2>
 
+      <fieldset class="field kindset">
+        <legend class="label">Fischart</legend>
+        <div class="kinds" id="fSpeciesChips"></div>
+        <label class="field" id="fSpeciesOtherWrap" hidden><span class="visually-hidden">Andere Fischart</span>
+          <input type="text" id="fSpeciesOther" list="dlSpecies" maxlength="40" autocomplete="off" placeholder="z. B. Brasse"></label>
+      </fieldset>
+
       <div class="spot" id="spot">
         <span class="label">Fangstelle</span>
         <p id="spotText">Tippe auf die Karte, nimm deine Position oder füge Koordinaten aus Google Maps ein.</p>
@@ -169,7 +182,7 @@
 
       <div class="grid2">
         <label class="field"><span class="label">Länge (cm)</span>
-          <input type="number" id="fLen" min="20" max="160" step="1" inputmode="numeric" required placeholder="z. B. 86"></label>
+          <input type="number" id="fLen" min="5" max="200" step="1" inputmode="numeric" required placeholder="z. B. 86"></label>
         <label class="field"><span class="label">Gewicht (kg)</span>
           <input type="number" id="fKg" min="0.2" max="30" step="0.1" inputmode="decimal" placeholder="optional">
           <span class="hint" id="lbHint"></span></label>
@@ -238,6 +251,7 @@
     </form>
 
     <datalist id="dlWater"></datalist>
+    <datalist id="dlSpecies"></datalist>
     <datalist id="dlAngler"></datalist>
     <datalist id="dlLure"></datalist>
   </aside>
@@ -284,8 +298,8 @@
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/supabase.js"></script>
-<script src="js/config.js?v=6"></script>
-<script src="js/loughs.js?v=6"></script>
-<script src="js/app.js?v=6"></script>
+<script src="js/config.js?v=7"></script>
+<script src="js/loughs.js?v=7"></script>
+<script src="js/app.js?v=7"></script>
 </body>
 </html>
