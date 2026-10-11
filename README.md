@@ -3,7 +3,7 @@ double H Fangkarte – das gemeinsame Hecht-Fangbuch für unsere Irland-Touren.
 
 **Adresse:** https://paur15.github.io/hhmap/
 
-Auf einer Luftbildkarte trägt jeder seine Fänge ein: Fangstelle (Tippen auf die Karte, GPS oder Koordinaten aus Google Maps), Länge, Gewicht, Köder, zurückgesetzt ja/nein, Foto und Notiz. Dazu kommen Rangliste, Meterhechte und Filter nach Jahr und Angler. Neue Fänge erscheinen sofort bei allen.
+Auf einer Luftbildkarte trägt jeder seine Fänge ein: Fangstelle (Tippen auf die Karte, GPS oder Koordinaten aus Google Maps), Länge, Gewicht, Köder, zurückgesetzt ja/nein, Foto und Notiz. Dazu kommen Ortssuche, Rangliste, Meterhechte und Filter nach Jahr und Angler. Neue Fänge erscheinen sofort bei allen.
 
 ## Einrichtung (einmalig)
 
@@ -44,6 +44,7 @@ Wer nicht auf der Gästeliste steht, kann sich zwar registrieren, sieht aber kei
 - Fotos werden vor dem Hochladen verkleinert; dabei gehen die eingebetteten Metadaten (z. B. GPS) verloren.
 - Schriften und Bibliotheken liegen in diesem Repository; es werden keine Google Fonts oder CDNs geladen.
 - Kartenkacheln kommen von Esri (Luftbild) bzw. OpenStreetMap; dabei sehen diese Dienste die IP-Adresse des Betrachters.
+- Die Ortssuche fragt OpenStreetMap Nominatim; dabei werden Suchbegriff und IP-Adresse übertragen.
 
 ## Technik
 
@@ -52,6 +53,7 @@ Statische Webseite (HTML/CSS/JavaScript, kein Build-Schritt), gehostet auf GitHu
 - Karte: [Leaflet](https://leafletjs.com) 1.9.4 – `vendor/leaflet/` (BSD-2-Clause)
 - Daten und Anmeldung: [supabase-js](https://github.com/supabase/supabase-js) 2.117.2 – `vendor/supabase.js` (MIT)
 - Luftbilder: Esri World Imagery, Beschriftung: Esri Imagery Labels
+- Ortssuche: [OpenStreetMap Nominatim](https://nominatim.org) (nur auf Knopfdruck, max. 1 Anfrage/Sekunde)
 - Schriften: Barlow, Barlow Condensed, IBM Plex Mono – `fonts/` (SIL Open Font License)
 - Seen-Umrisse für den Gewässer-Vorschlag: Natural Earth (gemeinfrei)
 

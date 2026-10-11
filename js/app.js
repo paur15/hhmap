@@ -253,7 +253,7 @@ async function refreshPhotoUrls() {
 }
 
 /* ---------------------------------------------------------------- map */
-let map = null, catchLayer = null, gpsLayer = null, draftMarker = null;
+let map = null, catchLayer = null, gpsLayer = null, searchLayer = null, draftMarker = null;
 const markers = new Map();
 const ESRI_ATTR = 'Powered by <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> | Esri, Maxar, Earthstar Geographics, and the GIS User Community';
 
@@ -321,7 +321,8 @@ function initMap() {
 
   catchLayer = L.layerGroup().addTo(map);
   gpsLayer = L.layerGroup().addTo(map);
-  map.on("click", e => { if (state.formOpen) setDraft(e.latlng.lat, e.latlng.lng, false); });
+  searchLayer = L.layerGroup().addTo(map);
+  map.on("click", e => { hideResults(); if (state.formOpen) setDraft(e.latlng.lat, e.latlng.lng, false); });
 }
 
 function fitToCatches() {
@@ -383,6 +384,74 @@ function guessWater(lat, lng) {
   for (const [n, la, ln] of LOUGHS.small) if (distKm([lat, lng], [la, ln]) <= 3.5) return n;
   return "";
 }
+
+/* Ortssuche über OpenStreetMap Nominatim.
+   Nutzungsregeln: nur auf Knopfdruck suchen (kein Suchen beim Tippen),
+   höchstens eine Anfrage pro Sekunde, Quelle angeben. */
+let searchBusy = false, lastSearch = 0;
+const searchIcon = L.divIcon({ className: "", html: '<div class="searchpin"></div>', iconSize: [22, 22], iconAnchor: [11, 11] });
+function hideResults() { $("searchResults").hidden = true; }
+function resultsInfo(text) {
+  const ul = $("searchResults"); ul.textContent = "";
+  ul.append(el("li", "info", text)); ul.hidden = false;
+}
+function goToPlace(lat, lng, name, bbox) {
+  hideResults();
+  searchLayer.clearLayers();
+  L.marker([lat, lng], { icon: searchIcon, keyboard: false, interactive: false })
+    .bindTooltip(name, { permanent: true, direction: "top", offset: [0, -12] }).addTo(searchLayer);
+  if (bbox) {
+    const b = L.latLngBounds([bbox[0], bbox[2]], [bbox[1], bbox[3]]);
+    if (reduceMotion) map.fitBounds(b, { padding: [40, 40], maxZoom: 15 });
+    else map.flyToBounds(b, { padding: [40, 40], maxZoom: 15, duration: 0.8 });
+  } else flyTo([lat, lng], 14);
+}
+$("search").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const q = $("searchQ").value.trim();
+  if (!q) { hideResults(); return; }
+  const c = parseCoords(q);
+  if (c) { goToPlace(c.lat, c.lng, c.lat.toFixed(5) + ", " + c.lng.toFixed(5)); $("searchQ").blur(); return; }
+  if (searchBusy) return;
+  const wait = 1100 - (Date.now() - lastSearch);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  searchBusy = true; lastSearch = Date.now();
+  resultsInfo("Suche …");
+  try {
+    const params = new URLSearchParams({
+      q, format: "jsonv2", limit: "6", "accept-language": "de,en",
+      countrycodes: "ie,gb", viewbox: "-11.0,55.5,-5.3,51.3", bounded: "1"
+    });
+    const r = await fetch("https://nominatim.openstreetmap.org/search?" + params.toString(), { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    const ul = $("searchResults"); ul.textContent = "";
+    if (!Array.isArray(data) || !data.length) {
+      ul.append(el("li", "info", "Nichts gefunden. Versuch es mit einem anderen Namen, z. B. „Lough Corrib“ oder „Oughterard“."));
+    } else {
+      data.forEach(p => {
+        const lat = Number(p.lat), lng = Number(p.lon);
+        if (!isFinite(lat) || !isFinite(lng)) return;
+        const parts = String(p.display_name || "").split(",").map(s => s.trim()).filter(Boolean);
+        const name = p.name || parts[0] || q;
+        const detail = parts.filter(s => s !== name).slice(0, 3).join(", ");
+        const bb = Array.isArray(p.boundingbox) && p.boundingbox.length === 4 ? p.boundingbox.map(Number) : null;
+        const li = el("li"), b = el("button"); b.type = "button";
+        b.append(el("span", "nm", name), el("span", "dt", detail));
+        b.addEventListener("click", () => { goToPlace(lat, lng, name, bb && bb.every(isFinite) ? bb : null); $("searchQ").blur(); });
+        li.append(b); ul.append(li);
+      });
+    }
+    const src = el("li", "src"); src.append("Suche: © ");
+    const a = el("a", null, "OpenStreetMap"); a.href = "https://www.openstreetmap.org/copyright"; a.target = "_blank"; a.rel = "noopener";
+    src.append(a, "-Mitwirkende"); ul.append(src);
+    ul.hidden = false;
+  } catch (e) {
+    resultsInfo("Die Ortssuche ist gerade nicht erreichbar. Versuch es gleich noch einmal.");
+  } finally { searchBusy = false; }
+});
+$("searchQ").addEventListener("input", () => { if (!$("searchQ").value.trim()) { hideResults(); searchLayer && searchLayer.clearLayers(); } });
+$("searchQ").addEventListener("keydown", e => { if (e.key === "Escape") { e.stopPropagation(); hideResults(); $("searchQ").blur(); } });
 
 /* ---------------------------------------------------------------- popups */
 function popupEl(c) {
