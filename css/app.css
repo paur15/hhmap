@@ -269,3 +269,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 .pop .kindchip{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
 .pop .ttl{font-weight:700;font-size:16px;overflow-wrap:anywhere}
 .flag-btn{display:flex!important;align-items:center;justify-content:center;width:34px;height:34px;border:none;cursor:pointer;border-radius:4px}
+
+/* Homebase-Burg */
+.castle{position:relative;width:48px;height:50px}
+.castle svg{display:block;filter:drop-shadow(0 0 1.5px #fff) drop-shadow(0 2px 3px rgba(0,0,0,.55))}
+.castle-label{position:absolute;left:50%;top:51px;transform:translateX(-50%);white-space:nowrap;background:#2A2118;color:#F2E6C9;border:1px solid #C9A85A;font-family:var(--f-display);font-weight:700;font-size:13px;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:4px;pointer-events:none}
+.castle-sw{background:#E9DFC7;box-shadow:inset 0 0 0 1.5px #2A2118}

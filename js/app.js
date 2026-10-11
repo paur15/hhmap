@@ -285,6 +285,7 @@ async function refreshPhotoUrls() {
 }
 
 /* ---------------------------------------------------------------- map */
+let homeLayer = null, homeMarker = null;
 let map = null, catchLayer = null, spotLayer = null, gpsLayer = null, searchLayer = null, draftMarker = null, flagMarker = null;
 const markers = new Map();
 const ESRI_ATTR = 'Powered by <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> | Esri, Maxar, Earthstar Geographics, and the GIS User Community';
@@ -311,7 +312,10 @@ function initMap() {
   (lsGet("hk-base") === "osm" ? osm : hybrid).addTo(map);
   catchLayer = L.layerGroup().addTo(map);
   spotLayer = L.layerGroup().addTo(map);
-  L.control.layers({ "Luftbild": hybrid, "Karte (OpenStreetMap)": osm }, { "Fänge": catchLayer, "Fähnchen": spotLayer }, { position: "topright" }).addTo(map);
+  homeLayer = L.layerGroup().addTo(map);
+  const overlays = { "Fänge": catchLayer, "Fähnchen": spotLayer };
+  if (addHomebase()) overlays["Homebase"] = homeLayer;
+  L.control.layers({ "Luftbild": hybrid, "Karte (OpenStreetMap)": osm }, overlays, { position: "topright" }).addTo(map);
   const zoomCls = () => map.getContainer().classList.toggle("z-lo", map.getZoom() < 10);
   map.on("zoomend", zoomCls); zoomCls();
   map.on("baselayerchange", e => lsSet("hk-base", e.layer === osm ? "osm" : "img"));
@@ -869,6 +873,47 @@ document.addEventListener("keydown", e => {
   if (state.formOpen) closeForm(); else if (state.flagOpen) closeFlagForm();
 });
 
+/* ---------------------------------------------------------------- Homebase */
+const HOME = (function () {
+  const h = CFG.homebase;
+  if (!h) return null;
+  const lat = Number(h.lat), lng = Number(h.lng);
+  if (h.lat == null || h.lng == null || !isFinite(lat) || !isFinite(lng)) return null;
+  return { lat, lng, label: h.label || "Homebase", name: h.name || "", eircode: h.eircode || "" };
+})();
+const CASTLE_SVG = '<svg viewBox="0 0 40 42" width="48" height="50" aria-hidden="true">' +
+  '<path d="M20 9V1.5" stroke="#2A2118" stroke-width="1.6" stroke-linecap="round"/>' +
+  '<path d="M20.6 2h7l-2 2.6 2 2.6h-7z" fill="#DE6824" stroke="#2A2118" stroke-width="1"/>' +
+  '<path d="M3 40V18h3v-3.5h2.6V18h2.2v-3.5h2.6V18H14V11h2.6V8h2.6v3h1.6V8h2.6v3H26v7h0.6v-3.5h2.6V18h2.2v-3.5h2.6V18H37v22z" fill="#E9DFC7" stroke="#2A2118" stroke-width="1.6" stroke-linejoin="round"/>' +
+  '<path d="M16.5 40v-6.5a3.5 3.5 0 0 1 7 0V40z" fill="#2A2118"/>' +
+  '<path d="M19.2 15.5h1.6v4h-1.6zM7.4 23h1.6v3.4H7.4zM31 23h1.6v3.4H31z" fill="#2A2118"/>' +
+  '<path d="M14 18h12" stroke="#2A2118" stroke-width="1.2"/>' +
+  '</svg>';
+function homePopup() {
+  const d = el("div", "pop");
+  d.append(el("span", "ttl", HOME.label));
+  if (HOME.name) d.append(el("span", null, HOME.name));
+  if (HOME.eircode) d.append(el("span", "coord", "Eircode " + HOME.eircode));
+  d.append(el("span", "coord", HOME.lat.toFixed(5) + ", " + HOME.lng.toFixed(5)));
+  const a = el("a", null, "Route in Google Maps");
+  a.href = "https://www.google.com/maps/dir/?api=1&destination=" + HOME.lat.toFixed(6) + "," + HOME.lng.toFixed(6);
+  a.target = "_blank"; a.rel = "noopener";
+  const row = el("div", "row"); row.append(a); d.append(row);
+  return d;
+}
+function addHomebase() {
+  if (!HOME) return false;
+  const box = el("div", "castle");
+  box.innerHTML = CASTLE_SVG;
+  box.append(el("span", "castle-label", HOME.label));
+  homeMarker = L.marker([HOME.lat, HOME.lng], {
+    icon: L.divIcon({ className: "", html: box, iconSize: [48, 50], iconAnchor: [24, 48], popupAnchor: [0, -46] }),
+    title: HOME.label, zIndexOffset: 500, riseOnHover: true
+  }).bindPopup(homePopup, { maxWidth: 260, minWidth: 200 });
+  homeMarker.addTo(homeLayer);
+  return true;
+}
+
 /* ---------------------------------------------------------------- Fähnchen */
 const KINDS = [
   { k: "hotspot", t: "Hotspot", s: "Hotspot" },
@@ -920,6 +965,15 @@ function renderSpots() {
     m.addTo(spotLayer); spotMarkers.set(s.id, m);
   });
   const ul = $("spotList"); ul.textContent = "";
+  if (HOME && homeMarker) {
+    const li = el("li"), b = el("button"); b.type = "button";
+    b.append(el("span", "sw castle-sw"), el("span", "lb", HOME.label + (HOME.name ? " · " + HOME.name : "")), el("span", "kd", "Burg"));
+    b.addEventListener("click", () => {
+      if (!map.hasLayer(homeLayer)) homeLayer.addTo(map);
+      flyTo(homeMarker.getLatLng(), 15); map.once("moveend", () => homeMarker.openPopup());
+    });
+    li.append(b); ul.append(li);
+  }
   [...state.spots].sort((a, b) => a.label.localeCompare(b.label, "de")).forEach(s => {
     const li = el("li"), b = el("button"); b.type = "button";
     const sw = el("span", "sw fk-" + s.kind);
@@ -932,7 +986,7 @@ function renderSpots() {
     li.append(b); ul.append(li);
   });
   $("spotCount").textContent = state.spots.length ? String(state.spots.length) : "";
-  $("spotEmpty").hidden = state.spots.length > 0;
+  $("spotEmpty").hidden = state.spots.length > 0 || !!HOME;
 }
 
 function buildKinds() {
