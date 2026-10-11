@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hechtkarte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/app.css?v=7">
+<link rel="stylesheet" href="css/app.css?v=8">
 </head>
 <body>
 
@@ -139,7 +139,7 @@
         </div>
       </div>
       <div class="section tight">
-        <div class="listhead"><h2>Fänge</h2><span id="listCount"></span></div>
+        <div class="listhead"><h2>Fänge</h2><span class="lhright"><span id="listCount"></span><button type="button" class="btn small" id="exportBtn">Exportieren</button></span></div>
         <ol class="list" id="list"></ol>
         <div class="empty" id="empty"><strong>Fänge werden geladen …</strong></div>
       </div>
@@ -280,6 +280,27 @@
   </div>
 </dialog>
 
+<!-- Export -->
+<dialog id="exportDlg" class="dlg" aria-labelledby="exportTitle">
+  <form method="dialog" class="dlghead">
+    <h2 id="exportTitle">Fänge exportieren</h2>
+    <button class="btn icon" aria-label="Schließen" value="close">✕</button>
+  </form>
+  <p class="muted" id="exportInfo"></p>
+  <div class="exportopts">
+    <button type="button" class="exportopt" id="exportCsv">
+      <span class="nm">Excel-Tabelle (CSV)</span>
+      <span class="dt">Alle Angaben zu den Fängen. Öffnet in Excel, Numbers oder Google Tabellen.</span>
+    </button>
+    <button type="button" class="exportopt" id="exportGpx">
+      <span class="nm">GPS-Wegpunkte (GPX)</span>
+      <span class="dt">Fangstellen als Wegpunkte für Echolot/Kartenplotter, Garmin, Google Earth oder Navi-Apps.</span>
+    </button>
+  </div>
+  <label class="check small"><input type="checkbox" id="exportSpots" checked> Fähnchen und Homebase in die GPX-Datei aufnehmen</label>
+  <p class="msg" id="exportMsg" role="status" hidden></p>
+</dialog>
+
 <!-- Passwort ändern -->
 <dialog id="pwDlg" class="dlg" aria-labelledby="pwTitle">
   <form method="dialog" class="dlghead">
@@ -298,8 +319,8 @@
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/supabase.js"></script>
-<script src="js/config.js?v=7"></script>
-<script src="js/loughs.js?v=7"></script>
-<script src="js/app.js?v=7"></script>
+<script src="js/config.js?v=8"></script>
+<script src="js/loughs.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
 </body>
 </html>

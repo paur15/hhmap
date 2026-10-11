@@ -1180,6 +1180,102 @@ $("flagDel").addEventListener("click", async () => {
   finally { b.disabled = false; }
 });
 
+/* ---------------------------------------------------------------- Export */
+function exportScope() {
+  const parts = [];
+  if (state.year !== "all") parts.push(state.year);
+  if (state.angler !== "all") parts.push(state.angler);
+  if (state.species !== "all") parts.push(speciesName(state.species));
+  return parts;
+}
+$("exportBtn").addEventListener("click", () => {
+  const n = filtered().length, parts = exportScope();
+  $("exportInfo").textContent = n
+    ? n + (n === 1 ? " Fang wird" : " Fänge werden") + " exportiert" + (parts.length ? " (Auswahl: " + parts.join(", ") + ")" : " (alle)") + ". Die Auswahl stellst du oben im Fangbuch mit den Filtern ein."
+    : "In der aktuellen Auswahl gibt es keine Fänge. Stell die Filter oben im Fangbuch um.";
+  $("exportCsv").disabled = !n;
+  $("exportGpx").disabled = !n && !(state.spots.length || HOME);
+  setMsg("exportMsg", "");
+  $("exportDlg").showModal();
+});
+
+function csvCell(v, isText) {
+  if (v == null) return "";
+  let s = String(v);
+  if (isText && /^[=+\-@\t\r]/.test(s)) s = "'" + s;   // Schutz vor Formeln in Excel
+  if (/[";\n\r]/.test(s)) s = '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function dec(n, d) { return n == null ? "" : n.toFixed(d).replace(".", ","); }
+function buildCsv(list) {
+  const head = ["Datum", "Angler", "Fischart", "Länge (cm)", "Gewicht (kg)", "Gewicht (lb/oz)", "Gewässer", "Köder",
+    "Zurückgesetzt", "Notiz", "Foto", "Breitengrad", "Längengrad", "Google Maps"];
+  const rows = list.map(c => [
+    csvCell(c.date), csvCell(c.angler, true), csvCell(speciesName(c.species), true), csvCell(c.len),
+    csvCell(c.kg ? dec(c.kg, 1) : ""), csvCell(c.kg ? lbOz(c.kg) : ""), csvCell(c.water, true), csvCell(c.lure, true),
+    c.released ? "ja" : "nein", csvCell(c.note, true), c.photo ? "ja" : "nein",
+    csvCell(dec(c.lat, 6)), csvCell(dec(c.lng, 6)),
+    "https://www.google.com/maps?q=" + c.lat.toFixed(6) + "," + c.lng.toFixed(6)
+  ].join(";"));
+  return "﻿" + [head.join(";")].concat(rows).join("\r\n") + "\r\n";
+}
+
+function xmlEsc(s) { return String(s).replace(/[<>&"']/g, ch => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" }[ch])); }
+function wpt(lat, lng, name, desc, sym, type) {
+  return '  <wpt lat="' + lat.toFixed(6) + '" lon="' + lng.toFixed(6) + '">\n' +
+    "    <name>" + xmlEsc(name.slice(0, 40)) + "</name>\n" +
+    (desc ? "    <desc>" + xmlEsc(desc) + "</desc>\n" : "") +
+    "    <sym>" + sym + "</sym>\n" +
+    "    <type>" + xmlEsc(type) + "</type>\n" +
+    "  </wpt>";
+}
+const GPX_SYM = { hotspot: "Fishing Hot Spot Facility", slip: "Boat Ramp", achtung: "Danger Area", unterkunft: "Lodging", parken: "Parking Area", sonstiges: "Flag, Blue" };
+function buildGpx(list, withSpots) {
+  const pts = [];
+  [...list].sort((a, b) => (a.date || "").localeCompare(b.date || "")).forEach(c => {
+    const name = speciesName(c.species) + " " + (c.len ? c.len + "cm " : "") + c.angler;
+    const desc = [fmtDate(c.date), c.water, c.lure, c.kg ? fmtKg(c.kg) + " (" + lbOz(c.kg) + ")" : "", c.released ? "zurückgesetzt" : "entnommen", c.note].filter(Boolean).join(" · ");
+    pts.push(wpt(c.lat, c.lng, name, desc, "Fishing Area", "Fang"));
+  });
+  if (withSpots) {
+    if (HOME) pts.push(wpt(HOME.lat, HOME.lng, HOME.label, [HOME.name, HOME.eircode ? "Eircode " + HOME.eircode : ""].filter(Boolean).join(" · "), "Residence", "Homebase"));
+    state.spots.forEach(s => pts.push(wpt(s.lat, s.lng, s.label, [KIND_BY[s.kind].t, s.note].filter(Boolean).join(" · "), GPX_SYM[s.kind] || "Flag, Blue", "Fähnchen")));
+  }
+  return '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<gpx version="1.1" creator="Hechtkarte Irland" xmlns="http://www.topografix.com/GPX/1/1">\n' +
+    "  <metadata>\n    <name>Hechtkarte Irland</name>\n    <time>" + new Date().toISOString() + "</time>\n  </metadata>\n" +
+    pts.join("\n") + "\n</gpx>\n";
+}
+
+function exportName(ext) {
+  const parts = exportScope().map(p => p.toLowerCase().replace(/[^a-z0-9äöüß]+/g, "-").replace(/^-|-$/g, ""));
+  return ["hechtkarte", ...parts, today()].join("_") + "." + ext;
+}
+async function deliver(filename, mime, content) {
+  const blob = new Blob([content], { type: mime });
+  const coarse = matchMedia("(pointer: coarse)").matches;
+  if (coarse && typeof File === "function" && navigator.canShare) {
+    const file = new File([blob], filename, { type: mime });
+    if (navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: filename }); return true; }
+      catch (e) { if (e && e.name === "AbortError") return false; }
+    }
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = filename;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return true;
+}
+$("exportCsv").addEventListener("click", async () => {
+  const name = exportName("csv");
+  if (await deliver(name, "text/csv;charset=utf-8", buildCsv(filtered()))) setMsg("exportMsg", "Erstellt: " + name, true);
+});
+$("exportGpx").addEventListener("click", async () => {
+  const name = exportName("gpx");
+  if (await deliver(name, "application/gpx+xml", buildGpx(filtered(), $("exportSpots").checked))) setMsg("exportMsg", "Erstellt: " + name, true);
+});
+
 /* ---------------------------------------------------------------- menu + dialogs */
 function closeMenu() { $("menu").removeAttribute("open"); }
 document.addEventListener("click", e => { if ($("menu").open && !$("menu").contains(e.target)) closeMenu(); });
