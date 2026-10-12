@@ -3,7 +3,7 @@ double H Fangkarte – das gemeinsame Hecht-Fangbuch für unsere Irland-Touren.
 
 **Adresse:** https://paur15.github.io/hhmap/
 
-Auf einer Luftbildkarte trägt jeder seine Fänge ein: Fischart (Hecht, Barsch, Aal oder andere), Fangstelle (Tippen auf die Karte, GPS oder Koordinaten aus Google Maps), Länge, Gewicht, Köder, zurückgesetzt ja/nein, Foto und Notiz. Dazu kommen Druckansicht (Kartenausschnitt mit nummerierten Fängen und Tabelle), Export als Excel-Tabelle (CSV) und GPS-Wegpunkte (GPX), beschriftete Fähnchen (Hotspot, Slipanlage, Untiefe/Felsen, Unterkunft, Parkplatz), Ortssuche, Rangliste, Meterhechte und Filter nach Jahr und Angler. Neue Fänge erscheinen sofort bei allen, und eine Online-Anzeige zeigt, wer die Karte gerade offen hat.
+Auf einer Luftbildkarte trägt jeder seine Fänge ein: Fang-Nummer (automatisch fortlaufend, änderbar – z. B. zum Übertragen der Papierkarte), Fischart (Hecht, Barsch, Aal oder andere), Fangstelle (Tippen auf die Karte, GPS oder Koordinaten aus Google Maps), Länge, Gewicht, Köder, zurückgesetzt ja/nein, Foto und Notiz. Dazu kommen Druckansicht (Kartenausschnitt mit nummerierten Fängen und Tabelle), Export als Excel-Tabelle (CSV) und GPS-Wegpunkte (GPX), beschriftete Fähnchen (Hotspot, Slipanlage, Untiefe/Felsen, Unterkunft, Parkplatz), Ortssuche, Rangliste, Meterhechte und Filter nach Jahr und Angler. Neue Fänge erscheinen sofort bei allen, und eine Online-Anzeige zeigt, wer die Karte gerade offen hat.
 
 ## Einrichtung (einmalig)
 
@@ -73,3 +73,4 @@ Statische Webseite (HTML/CSS/JavaScript, kein Build-Schritt), gehostet auf GitHu
 | `supabase/003_fischarten.sql` | Nachrüstung der Fischarten-Spalte für bestehende Installationen |
 | `supabase/004_online.sql` | Nachrüstung der Online-Anzeige für bestehende Installationen |
 | `supabase/005_einladungscode.sql` | Nachrüstung der Freischaltung per Einladungscode |
+| `supabase/006_fangnummer.sql` | Nachrüstung der Fang-Nummern (vorhandene Fänge werden nach Datum durchnummeriert) |

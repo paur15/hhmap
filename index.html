@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hechtkarte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/app.css?v=13">
+<link rel="stylesheet" href="css/app.css?v=14">
 </head>
 <body>
 
@@ -90,7 +90,7 @@
     <div id="map" aria-label="Karte mit den eingetragenen Hechtfängen"></div>
     <form id="search" class="search" role="search" novalidate>
       <div class="searchbar">
-        <input type="search" id="searchQ" placeholder="Ort oder Lough suchen" aria-label="Ort oder Lough suchen" autocomplete="off" enterkeyhint="search">
+        <input type="search" id="searchQ" placeholder="Ort, Lough oder Fang-Nr." aria-label="Ort, Lough oder Fang-Nummer suchen" autocomplete="off" enterkeyhint="search">
         <button type="submit" class="searchbtn" aria-label="Suchen">
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
         </button>
@@ -110,6 +110,7 @@
         <fieldset>
           <legend class="label">Anzeigen</legend>
           <label class="check small"><input type="checkbox" id="ovCatches" checked> Fänge</label>
+          <label class="check small" id="ovNumsWrap"><input type="checkbox" id="ovNums"> Fang-Nummern</label>
           <label class="check small"><input type="checkbox" id="ovSpots" checked> Fähnchen</label>
           <label class="check small" id="ovHomeWrap"><input type="checkbox" id="ovHome" checked> Homebase</label>
         </fieldset>
@@ -182,7 +183,7 @@
         </div>
       </div>
       <div class="section tight">
-        <div class="listhead"><h2>Fänge</h2><span class="lhright"><span id="listCount"></span><button type="button" class="btn small" id="exportBtn">Exportieren</button><button type="button" class="btn small" id="printBtn" title="Karte und sichtbare Fänge drucken">Drucken</button></span></div>
+        <div class="listhead"><h2>Fänge</h2><span class="lhright"><span id="listCount"></span><select id="fSort" class="sortsel" aria-label="Sortierung"><option value="date">Neueste zuerst</option><option value="nr">Nach Fang-Nr.</option></select><button type="button" class="btn small" id="exportBtn">Exportieren</button><button type="button" class="btn small" id="printBtn" title="Karte und sichtbare Fänge drucken">Drucken</button></span></div>
         <ol class="list" id="list"></ol>
         <div class="empty" id="empty"><strong>Fänge werden geladen …</strong></div>
       </div>
@@ -195,6 +196,14 @@
 
     <form id="form" class="form" hidden novalidate>
       <h2 id="formTitle">Neuer Fang</h2>
+
+      <div class="grid2" id="nrRow">
+        <label class="field"><span class="label">Fang-Nr.</span>
+          <input type="number" id="fNr" min="1" max="999999" step="1" inputmode="numeric" placeholder="automatisch"></label>
+        <label class="field"><span class="label">Datum</span>
+          <input type="date" id="fDate" required></label>
+      </div>
+      <p class="hint" id="nrHint"></p>
 
       <fieldset class="field kindset">
         <legend class="label">Fischart</legend>
@@ -216,12 +225,8 @@
       <label class="field"><span class="label">Gewässer</span>
         <input type="text" id="fWater" list="dlWater" maxlength="60" placeholder="z. B. Lough Corrib" autocomplete="off"></label>
 
-      <div class="grid2">
-        <label class="field"><span class="label">Angler</span>
-          <input type="text" id="fAnglerIn" list="dlAngler" maxlength="40" required autocomplete="off"></label>
-        <label class="field"><span class="label">Datum</span>
-          <input type="date" id="fDate" required></label>
-      </div>
+      <label class="field"><span class="label">Angler</span>
+        <input type="text" id="fAnglerIn" list="dlAngler" maxlength="40" required autocomplete="off"></label>
 
       <div class="grid2">
         <label class="field"><span class="label">Länge (cm)</span>
@@ -390,8 +395,8 @@
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/supabase.js"></script>
-<script src="js/config.js?v=13"></script>
-<script src="js/loughs.js?v=13"></script>
-<script src="js/app.js?v=13"></script>
+<script src="js/config.js?v=14"></script>
+<script src="js/loughs.js?v=14"></script>
+<script src="js/app.js?v=14"></script>
 </body>
 </html>

@@ -67,6 +67,7 @@ function fromRow(r) {
   return {
     id: r.id, owner: (r.owner_email || "").toLowerCase(), angler: r.angler || "Unbekannt",
     species: (typeof r.species === "string" && r.species.trim()) ? r.species.trim() : "hecht",
+    nr: r.nr != null && isFinite(Number(r.nr)) ? Number(r.nr) : null,
     date: r.caught_on || "", water: r.water || "", lat, lng,
     len: r.length_cm ? Number(r.length_cm) : null, kg: kg && kg > 0 ? kg : null,
     lure: r.lure || "", released: r.released !== false, note: r.note || "",
@@ -292,16 +293,16 @@ function spotFromRow(r) {
     kind: KIND_BY[r.kind] ? r.kind : "sonstiges", note: r.note || "", lat, lng };
 }
 const CATCH_COLS = "id,owner_email,angler,caught_on,water,lat,lng,length_cm,weight_kg,lure,released,note,photo_path,created_at";
-function catchQuery(withSpecies) {
+function catchQuery() {
   return sb.from("catches")
-    .select(withSpecies ? CATCH_COLS + ",species" : CATCH_COLS)
+    .select(CATCH_COLS + (state.speciesMissing ? "" : ",species") + (state.nrMissing ? "" : ",nr"))
     .order("caught_on", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(5000);
 }
 async function reload() {
   let [cres, sres] = await Promise.all([
-    catchQuery(!state.speciesMissing),
+    catchQuery(),
     sb.from("spots").select("id,owner_email,label,kind,note,lat,lng,created_at").order("label").limit(2000)
   ]);
   if (sres.error) {
@@ -315,10 +316,18 @@ async function reload() {
     state.spots = (sres.data || []).map(spotFromRow).filter(Boolean);
     if (!spotChannel) subscribeSpots();
   }
-  if (cres.error && !state.speciesMissing && (cres.error.code === "42703" || /species/i.test(cres.error.message || ""))) {
-    state.speciesMissing = true;
-    cres = await catchQuery(false);
+  for (let i = 0; i < 2 && cres.error && cres.error.code === "42703"; i++) {
+    const m = cres.error.message || "";
+    if (!state.nrMissing && /\bnr\b/i.test(m)) state.nrMissing = true;
+    else if (!state.speciesMissing && /species/i.test(m)) state.speciesMissing = true;
+    else break;
+    cres = await catchQuery();
   }
+  $("nrRow").classList.toggle("nonr", !!state.nrMissing);
+  $("fNr").closest(".field").hidden = !!state.nrMissing;
+  $("ovNumsWrap").hidden = !!state.nrMissing;
+  if (state.nrMissing && state.isAdmin && !cres.error && !noticeKind)
+    showNotice("Für die Fang-Nummern fehlt noch eine Datenbank-Spalte. Führe einmal supabase/006_fangnummer.sql im SQL-Editor von Supabase aus.", false, "nr");
   if (state.speciesMissing && state.isAdmin && !cres.error)
     showNotice("Für die Fischarten fehlt noch eine Datenbank-Spalte. Führe einmal supabase/003_fischarten.sql im SQL-Editor von Supabase aus.", false, "species");
   const { data, error } = cres;
@@ -527,6 +536,7 @@ function setBase(which, remember) {
 function showOverlay(layer) { if (layer && !map.hasLayer(layer)) layer.addTo(map); syncLayerUi(); }
 function syncLayerUi() {
   if (!map) return;
+  $("ovNums").checked = showNums();
   document.querySelectorAll('input[name="baseLayer"]').forEach(i => { i.checked = (i.value === "osm") === map.hasLayer(baseOsm); });
   $("ovCatches").checked = map.hasLayer(catchLayer);
   $("ovSpots").checked = map.hasLayer(spotLayer);
@@ -541,6 +551,7 @@ $("layerBtn").addEventListener("click", e => {
 });
 document.addEventListener("click", e => { if (!$("layerPanel").hidden && !$("layerCtl").contains(e.target)) closeLayerPanel(); });
 document.querySelectorAll('input[name="baseLayer"]').forEach(i => i.addEventListener("change", () => setBase(i.value)));
+$("ovNums").addEventListener("change", () => { lsSet("hk-nums", $("ovNums").checked ? "1" : "0"); applyNumberLabels(filtered()); });
 [["ovCatches", () => catchLayer], ["ovSpots", () => spotLayer], ["ovHome", () => homeLayer]].forEach(([id, get]) => {
   $(id).addEventListener("change", () => { const l = get(); if (!l) return; if ($(id).checked) l.addTo(map); else map.removeLayer(l); });
 });
@@ -570,6 +581,16 @@ $("search").addEventListener("submit", async ev => {
   ev.preventDefault();
   const q = $("searchQ").value.trim();
   if (!q) { hideResults(); return; }
+  const nm = q.match(/^(?:#|nr\.?|nummer)?\s*(\d{1,6})$/i);
+  if (nm) {
+    const hit = findByNr(Number(nm[1]));
+    if (hit) {
+      hideResults(); $("searchQ").blur();
+      if (!filtered().some(c => c.id === hit.id)) { state.year = "all"; state.angler = "all"; state.species = "all"; render(); }
+      showOverlay(catchLayer); focusCatch(hit.id, true); return;
+    }
+    if (/^(#|nr|nummer)/i.test(q)) { resultsInfo("Es gibt keinen Fang mit der Nummer " + nm[1] + "."); return; }
+  }
   const c = parseCoords(q);
   if (c) { goToPlace(c.lat, c.lng, c.lat.toFixed(5) + ", " + c.lng.toFixed(5)); $("searchQ").blur(); return; }
   if (searchBusy) return;
@@ -624,6 +645,7 @@ function popupEl(c) {
     a.append(img); d.append(a);
   }
   const top = el("div", "top");
+  if (c.nr != null) top.append(el("span", "nrbig", "Nr. " + c.nr));
   const big = el("span", "big", c.len ? String(c.len) : "–"); if (c.len) big.append(el("small", null, " cm"));
   top.append(big);
   const spc = el("span", "w " + speciesClass(c.species)); spc.append(el("i", "spdot"), speciesName(c.species)); top.append(spc);
@@ -651,11 +673,18 @@ function popupEl(c) {
 }
 
 /* ---------------------------------------------------------------- render */
+function sortCatches(list) {
+  if (lsGet("hk-sort") === "nr" && !state.nrMissing)
+    return list.sort((a, b) => (a.nr == null) - (b.nr == null) || (a.nr || 0) - (b.nr || 0));
+  return list.sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.created || "").localeCompare(a.created || ""));
+}
+function nextNr() { return state.catches.reduce((m, c) => Math.max(m, c.nr || 0), 0) + 1; }
+function findByNr(n) { return state.catches.find(c => c.nr === n); }
 function filtered() {
-  return state.catches.filter(c =>
+  return sortCatches(state.catches.filter(c =>
     (state.year === "all" || c.date.slice(0, 4) === state.year) &&
     (state.angler === "all" || c.angler === state.angler) &&
-    (state.species === "all" || c.species === state.species));
+    (state.species === "all" || c.species === state.species)));
 }
 function fillSelect(sel, values, allLabel, current) {
   const keep = values.includes(current) ? current : "all";
@@ -721,7 +750,9 @@ function render() {
     const b = el("button"); b.type = "button";
     const len = el("span", "len", c.len ? String(c.len) : "–"); if (c.len) len.append(el("small", null, "cm"));
     const meta = el("span", "meta");
-    const who = el("span", "who", c.angler); if (c.water) who.append(el("span", null, " · " + c.water));
+    const who = el("span", "who");
+    if (c.nr != null) who.append(el("span", "nrtag", String(c.nr)));
+    who.append(c.angler); if (c.water) who.append(el("span", null, " · " + c.water));
     const det = [speciesName(c.species), fmtDate(c.date), c.lure, c.kg ? fmtKg(c.kg) : "", c.released ? "" : "entnommen", c.photo ? "mit Foto" : ""].filter(Boolean).join(" · ");
     const detEl = el("span", "det " + speciesClass(c.species)); detEl.append(el("i", "spdot"), det);
     meta.append(who, detEl);
@@ -758,7 +789,7 @@ function renderMarkers(list) {
   });
   [...list].sort((a, b) => (a.len || 0) - (b.len || 0)).forEach(c => markers.get(c.id).bringToFront());
   if (reopen && markers.has(reopen) && !state.formOpen && !printState) markers.get(reopen).openPopup();
-  if (printState) addPrintNumbers();
+  applyNumberLabels(list);
 }
 
 function select(id) {
@@ -778,6 +809,8 @@ function focusCatch(id, fly) {
 $("fYear").addEventListener("change", e => { state.year = e.target.value; render(); });
 $("fAngler").addEventListener("change", e => { state.angler = e.target.value; render(); });
 $("fSpecies").addEventListener("change", e => { state.species = e.target.value; render(); });
+$("fSort").value = lsGet("hk-sort") === "nr" ? "nr" : "date";
+$("fSort").addEventListener("change", e => { lsSet("hk-sort", e.target.value); render(); });
 
 /* ---------------------------------------------------------------- form */
 const draftIcon = L.divIcon({ className: "", html: '<div class="draft"></div>', iconSize: [34, 34], iconAnchor: [17, 17] });
@@ -857,6 +890,9 @@ function openForm(c) {
   $("fDate").value = c ? (c.date || today()) : today();
   $("fWater").value = c ? c.water : "";
   $("fLen").value = c && c.len ? c.len : "";
+  $("fNr").value = c ? (c.nr != null ? c.nr : "") : (state.nrMissing ? "" : nextNr());
+  $("nrHint").className = "hint";
+  $("nrHint").textContent = c || state.nrMissing ? "" : "Nächste freie Nummer ist eingetragen. Beim Übertragen der Papierkarte einfach die Nummer von dort eingeben.";
   setSpecies(c ? c.species : (lsGet("hk-species") || "hecht"));
   $("fKg").value = c && c.kg ? c.kg : "";
   $("fLure").value = c ? c.lure : (lsGet("hk-lure") || "");
@@ -887,6 +923,16 @@ function closeForm() {
 $("addBtn").addEventListener("click", () => openForm(null));
 $("cancelBtn").addEventListener("click", closeForm);
 $("fKg").addEventListener("input", updateLb);
+$("fNr").addEventListener("input", () => {
+  const h = $("nrHint"), v = $("fNr").value.trim();
+  h.className = "hint";
+  if (!v) { h.textContent = "Ohne Nummer vergibt die App beim Speichern automatisch die nächste freie (" + nextNr() + ")."; return; }
+  const dup = findByNr(parseInt(v, 10));
+  if (dup && dup.id !== state.editing) {
+    h.className = "hint err";
+    h.textContent = "Nr. " + v + " ist schon vergeben: " + speciesName(dup.species) + (dup.len ? " " + dup.len + " cm" : "") + ", " + dup.angler + ", " + fmtDate(dup.date) + ". Nächste freie: " + nextNr() + ".";
+  } else h.textContent = "Nr. " + v + " ist frei.";
+});
 $("fWater").addEventListener("input", () => { state.waterAuto = false; });
 $("fCoords").addEventListener("input", () => {
   const v = $("fCoords").value, h = $("coordHint");
@@ -954,6 +1000,17 @@ $("form").addEventListener("submit", async ev => {
   if (!angler) return fail("Trag ein, wer den Hecht gefangen hat.", "fAnglerIn");
   const date = $("fDate").value;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail("Bitte ein Datum wählen.", "fDate");
+  let nr = null;
+  if (!state.nrMissing) {
+    const nrRaw = $("fNr").value.trim();
+    if (nrRaw) {
+      nr = parseInt(nrRaw, 10);
+      if (!(nr >= 1 && nr <= 999999) || String(nr) !== nrRaw.replace(/^0+(?=\d)/, "")) return fail("Die Fang-Nr. muss eine ganze Zahl ab 1 sein.", "fNr");
+      const dup = findByNr(nr);
+      if (dup && dup.id !== state.editing)
+        return fail("Die Nr. " + nr + " ist schon vergeben (" + speciesName(dup.species) + (dup.len ? " " + dup.len + " cm" : "") + ", " + dup.angler + ", " + fmtDate(dup.date) + "). Nächste freie Nummer: " + nextNr() + ".", "fNr");
+    }
+  }
   const len = parseInt($("fLen").value, 10);
   const species = getSpecies();
   if (!species) return fail("Gib die Fischart ein.", "fSpeciesOther");
@@ -986,6 +1043,7 @@ $("form").addEventListener("submit", async ev => {
       note: $("fNote").value.trim().slice(0, 280) || null, photo_path: photoPath
     };
     if (!state.speciesMissing) row.species = species;
+    if (!state.nrMissing) row.nr = nr;
     const q = state.editing
       ? sb.from("catches").update(row).eq("id", state.editing).select("id").single()
       : sb.from("catches").insert(row).select("id").single();
@@ -1004,7 +1062,8 @@ $("form").addEventListener("submit", async ev => {
     focusCatch(id, false);
   } catch (e) {
     if (uploaded) sb.storage.from("photos").remove([uploaded]).catch(() => {});
-    setMsg("formErr", e && e.userMsg ? e.userMsg : explainDb(e));
+    setMsg("formErr", e && e.userMsg ? e.userMsg
+      : (e && e.code === "23505" ? "Diese Fang-Nr. ist inzwischen vergeben. Nimm eine andere, z. B. die nächste freie: " + nextNr() + "." : explainDb(e)));
   } finally {
     state.saving = false; btn.disabled = false;
     btn.textContent = state.editing ? "Änderungen speichern" : "Fang speichern";
@@ -1343,12 +1402,23 @@ $("nameForm").addEventListener("submit", async ev => {
 
 /* ---------------------------------------------------------------- Drucken */
 let printState = null;
+function printNo(c, i) { return c.nr != null ? c.nr : i + 1; }
 function addPrintNumbers() {
   if (!printState) return;
   printState.list.forEach((c, i) => {
     const m = markers.get(c.id); if (!m) return;
     m.unbindTooltip();
-    m.bindTooltip(String(i + 1), { permanent: true, direction: "right", offset: [6, 0], className: "printnum", interactive: false });
+    m.bindTooltip(String(printNo(c, i)), { permanent: true, direction: "right", offset: [6, 0], className: "printnum", interactive: false });
+  });
+}
+function showNums() { return !state.nrMissing && lsGet("hk-nums") === "1"; }
+function applyNumberLabels(list) {
+  if (printState) return addPrintNumbers();
+  const on = showNums();
+  list.forEach(c => {
+    const m = markers.get(c.id); if (!m) return;
+    m.unbindTooltip();
+    if (on && c.nr != null) m.bindTooltip(String(c.nr), { permanent: true, direction: "right", offset: [6, 0], className: "numlabel", interactive: false });
   });
 }
 function tilesReady(maxMs) {
@@ -1393,7 +1463,7 @@ function buildPrintSheet(list) {
     const tr = el("tr");
     const sp = el("td", speciesClass(c.species)); sp.append(el("i", "spdot"), speciesName(c.species) + (isMeterhecht(c) ? " ★" : ""));
     tr.append(
-      el("td", "nr", String(i + 1)), el("td", null, fmtDate(c.date)), el("td", null, c.angler), sp,
+      el("td", "nr", String(printNo(c, i))), el("td", null, fmtDate(c.date)), el("td", null, c.angler), sp,
       el("td", "num", c.len ? c.len + " cm" : "–"), el("td", "num", c.kg ? fmtKg(c.kg) : ""),
       el("td", null, c.water), el("td", null, c.lure), el("td", null, c.released ? "zurück" : "entnommen"),
       el("td", "note", c.note), el("td", "pos", c.lat.toFixed(5) + ", " + c.lng.toFixed(5))
@@ -1411,6 +1481,7 @@ async function openPrint() {
   showOverlay(catchLayer);
   const bounds = map.getBounds();
   const list = filtered().filter(c => bounds.contains([c.lat, c.lng]));
+  if (!state.nrMissing) list.sort((a, b) => (a.nr == null) - (b.nr == null) || (a.nr || 0) - (b.nr || 0));
   printState = { center: map.getCenter(), zoom: map.getZoom(), bounds, list, scrollY: window.scrollY, vw: window.innerWidth };
   buildPrintSheet(list);
   document.body.classList.add("print-mode");
@@ -1435,6 +1506,7 @@ function closePrint() {
   $("printBar").hidden = true; $("printHead").hidden = true; $("printTable").hidden = true;
   $("appScreen").style.zoom = "";
   markers.forEach(m => m.unbindTooltip());
+  applyNumberLabels(filtered());
   map.invalidateSize({ pan: false });
   map.setView(ps.center, ps.zoom, { animate: false });
   window.scrollTo(0, ps.scrollY);
@@ -1473,10 +1545,10 @@ function csvCell(v, isText) {
 }
 function dec(n, d) { return n == null ? "" : n.toFixed(d).replace(".", ","); }
 function buildCsv(list) {
-  const head = ["Datum", "Angler", "Fischart", "Länge (cm)", "Gewicht (kg)", "Gewicht (lb/oz)", "Gewässer", "Köder",
+  const head = ["Nr.", "Datum", "Angler", "Fischart", "Länge (cm)", "Gewicht (kg)", "Gewicht (lb/oz)", "Gewässer", "Köder",
     "Zurückgesetzt", "Notiz", "Foto", "Breitengrad", "Längengrad", "Google Maps"];
   const rows = list.map(c => [
-    csvCell(c.date), csvCell(c.angler, true), csvCell(speciesName(c.species), true), csvCell(c.len),
+    csvCell(c.nr), csvCell(c.date), csvCell(c.angler, true), csvCell(speciesName(c.species), true), csvCell(c.len),
     csvCell(c.kg ? dec(c.kg, 1) : ""), csvCell(c.kg ? lbOz(c.kg) : ""), csvCell(c.water, true), csvCell(c.lure, true),
     c.released ? "ja" : "nein", csvCell(c.note, true), c.photo ? "ja" : "nein",
     csvCell(dec(c.lat, 6)), csvCell(dec(c.lng, 6)),
@@ -1498,7 +1570,7 @@ const GPX_SYM = { hotspot: "Fishing Hot Spot Facility", slip: "Boat Ramp", achtu
 function buildGpx(list, withSpots) {
   const pts = [];
   [...list].sort((a, b) => (a.date || "").localeCompare(b.date || "")).forEach(c => {
-    const name = speciesName(c.species) + " " + (c.len ? c.len + "cm " : "") + c.angler;
+    const name = (c.nr != null ? "#" + c.nr + " " : "") + speciesName(c.species) + " " + (c.len ? c.len + "cm " : "") + c.angler;
     const desc = [fmtDate(c.date), c.water, c.lure, c.kg ? fmtKg(c.kg) + " (" + lbOz(c.kg) + ")" : "", c.released ? "zurückgesetzt" : "entnommen", c.note].filter(Boolean).join(" · ");
     pts.push(wpt(c.lat, c.lng, name, desc, "Fishing Area", "Fang"));
   });
