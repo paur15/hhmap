@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hechtkarte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/app.css?v=12">
+<link rel="stylesheet" href="css/app.css?v=13">
 </head>
 <body>
 
@@ -79,6 +79,13 @@
 
 <!-- App -->
 <div id="appScreen" class="app" hidden>
+  <header class="printhead" id="printHead" hidden>
+    <div>
+      <h1>Hechtkarte Irland</h1>
+      <p id="printSub"></p>
+    </div>
+    <dl class="printstats" id="printStats"></dl>
+  </header>
   <div class="mapwrap">
     <div id="map" aria-label="Karte mit den eingetragenen Hechtfängen"></div>
     <form id="search" class="search" role="search" novalidate>
@@ -175,7 +182,7 @@
         </div>
       </div>
       <div class="section tight">
-        <div class="listhead"><h2>Fänge</h2><span class="lhright"><span id="listCount"></span><button type="button" class="btn small" id="exportBtn">Exportieren</button></span></div>
+        <div class="listhead"><h2>Fänge</h2><span class="lhright"><span id="listCount"></span><button type="button" class="btn small" id="exportBtn">Exportieren</button><button type="button" class="btn small" id="printBtn" title="Karte und sichtbare Fänge drucken">Drucken</button></span></div>
         <ol class="list" id="list"></ol>
         <div class="empty" id="empty"><strong>Fänge werden geladen …</strong></div>
       </div>
@@ -291,6 +298,15 @@
     <datalist id="dlAngler"></datalist>
     <datalist id="dlLure"></datalist>
   </aside>
+  <section class="printtable" id="printTable" hidden></section>
+</div>
+
+<!-- Druckansicht: Leiste oben (wird nicht mitgedruckt) -->
+<div class="printbar" id="printBar" hidden>
+  <span class="printstate" id="printState">Druckansicht</span>
+  <span class="spacer"></span>
+  <button type="button" class="btn primary" id="printGo">Drucken</button>
+  <button type="button" class="btn" id="printClose">Zurück zur Karte</button>
 </div>
 
 <!-- Gästeliste -->
@@ -374,8 +390,8 @@
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/supabase.js"></script>
-<script src="js/config.js?v=12"></script>
-<script src="js/loughs.js?v=12"></script>
-<script src="js/app.js?v=12"></script>
+<script src="js/config.js?v=13"></script>
+<script src="js/loughs.js?v=13"></script>
+<script src="js/app.js?v=13"></script>
 </body>
 </html>

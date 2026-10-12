@@ -264,6 +264,7 @@ function teardown() {
   if (channel) { sb.removeChannel(channel); channel = null; }
   if (spotChannel) { sb.removeChannel(spotChannel); spotChannel = null; }
   stopPresence(); state.online = []; $("onlineBtn").hidden = true; $("onlinePop").hidden = true;
+  if (printState) closePrint();
   if (state.formOpen) closeForm();
   if (state.flagOpen) closeFlagForm();
   state.spots = [];
@@ -756,7 +757,8 @@ function renderMarkers(list) {
     m.addTo(catchLayer); markers.set(c.id, m);
   });
   [...list].sort((a, b) => (a.len || 0) - (b.len || 0)).forEach(c => markers.get(c.id).bringToFront());
-  if (reopen && markers.has(reopen) && !state.formOpen) markers.get(reopen).openPopup();
+  if (reopen && markers.has(reopen) && !state.formOpen && !printState) markers.get(reopen).openPopup();
+  if (printState) addPrintNumbers();
 }
 
 function select(id) {
@@ -1338,6 +1340,110 @@ $("nameForm").addEventListener("submit", async ev => {
   await heartbeat();
   setTimeout(() => $("nameDlg").close(), 900);
 });
+
+/* ---------------------------------------------------------------- Drucken */
+let printState = null;
+function addPrintNumbers() {
+  if (!printState) return;
+  printState.list.forEach((c, i) => {
+    const m = markers.get(c.id); if (!m) return;
+    m.unbindTooltip();
+    m.bindTooltip(String(i + 1), { permanent: true, direction: "right", offset: [6, 0], className: "printnum", interactive: false });
+  });
+}
+function tilesReady(maxMs) {
+  return new Promise(resolve => {
+    const t0 = Date.now();
+    const check = () => {
+      let busy = false;
+      map.eachLayer(l => { if (l instanceof L.GridLayer && l.isLoading && l.isLoading()) busy = true; });
+      if (!busy || Date.now() - t0 > maxMs) resolve(); else setTimeout(check, 200);
+    };
+    setTimeout(check, 350);
+  });
+}
+function fitPrintScale() {
+  // Bildschirm-Vorschau auf schmalen Geräten verkleinern (beim Drucken wieder 100 %)
+  const app = $("appScreen");
+  const vw = Math.min(window.innerWidth, document.documentElement.clientWidth || window.innerWidth, (window.visualViewport && window.visualViewport.width) || 1e9, printState ? printState.vw : 1e9);
+  app.style.zoom = "";
+  const full = app.offsetWidth;
+  const s = Math.min(1, (vw - 24) / full);
+  app.style.zoom = s < 1 ? String(Math.round(s * 1000) / 1000) : "";
+}
+function buildPrintSheet(list) {
+  const parts = exportScope();
+  $("printSub").textContent = "Fänge im Kartenausschnitt · " + (parts.length ? "Auswahl: " + parts.join(", ") : "alle Jahre, Angler und Arten") +
+    " · gedruckt am " + df.format(new Date());
+  const lens = list.filter(c => c.len);
+  const max = lens.reduce((m, c) => (!m || c.len > m.len) ? c : m, null);
+  const st = $("printStats"); st.textContent = "";
+  const stat = (k, v) => { const d = el("div"); d.append(el("dt", null, k), el("dd", null, v)); st.append(d); };
+  stat("Fänge", String(list.length));
+  stat("Größter", max ? max.len + " cm " + speciesName(max.species) + " · " + max.angler : "–");
+  stat("Meterhechte", String(list.filter(isMeterhecht).length));
+
+  const box = $("printTable"); box.textContent = "";
+  if (!list.length) { box.append(el("p", "empty", "Im Kartenausschnitt sind keine Fänge sichtbar.")); return; }
+  const tbl = el("table"), thead = el("thead"), hr = el("tr");
+  ["Nr.", "Datum", "Angler", "Fischart", "Länge", "Gewicht", "Gewässer", "Köder", "Verbleib", "Notiz", "Position"].forEach(t => hr.append(el("th", null, t)));
+  thead.append(hr); tbl.append(thead);
+  const tb = el("tbody");
+  list.forEach((c, i) => {
+    const tr = el("tr");
+    const sp = el("td", speciesClass(c.species)); sp.append(el("i", "spdot"), speciesName(c.species) + (isMeterhecht(c) ? " ★" : ""));
+    tr.append(
+      el("td", "nr", String(i + 1)), el("td", null, fmtDate(c.date)), el("td", null, c.angler), sp,
+      el("td", "num", c.len ? c.len + " cm" : "–"), el("td", "num", c.kg ? fmtKg(c.kg) : ""),
+      el("td", null, c.water), el("td", null, c.lure), el("td", null, c.released ? "zurück" : "entnommen"),
+      el("td", "note", c.note), el("td", "pos", c.lat.toFixed(5) + ", " + c.lng.toFixed(5))
+    );
+    tb.append(tr);
+  });
+  tbl.append(tb); box.append(tbl);
+  box.append(el("p", "foot", "★ = Meterhecht (Hecht ab 100 cm). Nummern entsprechen den Markierungen auf der Karte. Hechtkarte Irland · " + location.host + location.pathname));
+}
+async function openPrint() {
+  if (!map || printState) return;
+  if (state.formOpen) closeForm();
+  if (state.flagOpen) closeFlagForm();
+  map.closePopup(); hideResults(); closeLayerPanel();
+  showOverlay(catchLayer);
+  const bounds = map.getBounds();
+  const list = filtered().filter(c => bounds.contains([c.lat, c.lng]));
+  printState = { center: map.getCenter(), zoom: map.getZoom(), bounds, list, scrollY: window.scrollY, vw: window.innerWidth };
+  buildPrintSheet(list);
+  document.body.classList.add("print-mode");
+  $("printBar").hidden = false; $("printHead").hidden = false; $("printTable").hidden = false;
+  $("printState").textContent = "Karte wird geladen …";
+  $("printGo").disabled = true;
+  window.scrollTo(0, 0);
+  map.invalidateSize({ pan: false });
+  map.fitBounds(bounds, { padding: [0, 0], animate: false });
+  fitPrintScale();
+  addPrintNumbers();
+  await tilesReady(7000);
+  if (!printState) return;
+  $("printState").textContent = list.length ? list.length + (list.length === 1 ? " Fang" : " Fänge") + " im Ausschnitt" : "Keine Fänge im Ausschnitt";
+  $("printGo").disabled = false;
+  setTimeout(() => { if (printState) window.print(); }, 200);
+}
+function closePrint() {
+  if (!printState) return;
+  const ps = printState; printState = null;
+  document.body.classList.remove("print-mode");
+  $("printBar").hidden = true; $("printHead").hidden = true; $("printTable").hidden = true;
+  $("appScreen").style.zoom = "";
+  markers.forEach(m => m.unbindTooltip());
+  map.invalidateSize({ pan: false });
+  map.setView(ps.center, ps.zoom, { animate: false });
+  window.scrollTo(0, ps.scrollY);
+}
+$("printBtn").addEventListener("click", openPrint);
+$("printGo").addEventListener("click", () => window.print());
+$("printClose").addEventListener("click", closePrint);
+window.addEventListener("resize", () => { if (printState) { printState.vw = window.innerWidth; fitPrintScale(); } });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && printState) closePrint(); });
 
 /* ---------------------------------------------------------------- Export */
 function exportScope() {

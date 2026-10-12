@@ -114,7 +114,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 .board td.n{text-align:right;white-space:nowrap;color:var(--muted)}
 .board td.best{width:auto;padding-left:12px;text-align:right;white-space:nowrap;font-weight:600}
 
-.listhead{display:flex;align-items:baseline;justify-content:space-between}
+.listhead{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:baseline;justify-content:space-between}
 .listhead span{font-size:13px;color:var(--muted)}
 .list{list-style:none;margin:0;padding:0}
 .catch{border-bottom:1px solid var(--line)}
@@ -327,3 +327,57 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 .invitecode{font-family:var(--f-mono);font-size:20px;letter-spacing:.06em;padding:6px 0;overflow-wrap:anywhere}
 .invite .actions{gap:8px}
 .dlg > .label{display:block;margin-top:20px}
+
+/* Druckansicht */
+.printbar{position:fixed;top:0;left:0;right:0;z-index:3000;display:flex;align-items:center;gap:10px;padding:10px 16px;padding-top:max(10px,env(safe-area-inset-top));background:#1D2823;color:#F7F8F3;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+.printbar .spacer{flex:1}
+.printbar .btn{border-color:rgba(255,255,255,.35);color:#F7F8F3}
+.printbar .btn.primary{background:#9BBA64;border-color:#9BBA64;color:#132009}
+.printstate{font-weight:600;font-size:14px}
+body.print-mode{
+  --bg:#FFFFFF; --panel:#FFFFFF; --ink:#1D2823; --muted:#5B685F; --line:#D2D8CB; --accent:#44602A; --gold:#B5870F;
+  color-scheme:light; background:#E6E8E2; height:auto; overflow:auto; padding-top:76px;
+}
+html:has(body.print-mode){height:auto}
+body.print-mode .app{display:flex;flex-direction:column;gap:14px;width:1000px;height:auto;margin:0 auto 32px;padding:28px 32px;background:#fff;color:#1D2823;box-shadow:0 2px 16px rgba(0,0,0,.15);box-sizing:content-box}
+html:has(body.print-mode){overflow-x:hidden}
+@media (max-width:520px){.printstate{display:none}.printbar .btn{padding:0 12px}}
+body.print-mode .panel,
+body.print-mode .search,
+body.print-mode .layerctl,
+body.print-mode .maphint,
+body.print-mode .leaflet-top{display:none!important}
+body.print-mode .mapwrap{order:1;flex:none;height:540px;border:1px solid #C9CEC2}
+body.print-mode .legend{display:flex!important;bottom:10px}
+body.print-mode #printHead{order:0}
+body.print-mode #printTable{order:2}
+.printhead{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;border-bottom:2px solid #1D2823;padding-bottom:10px}
+.printhead h1{margin:0;font-family:var(--f-display);font-weight:700;font-size:28px;letter-spacing:.02em;text-transform:uppercase;line-height:1}
+.printhead p{margin:6px 0 0;font-size:13px;color:#5B685F}
+.printstats{display:flex;gap:22px;margin:0}
+.printstats div{display:flex;flex-direction:column;align-items:flex-end}
+.printstats dt{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#5B685F}
+.printstats dd{margin:0;font-family:var(--f-display);font-weight:700;font-size:22px;font-variant-numeric:tabular-nums}
+.printtable table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.printtable th{text-align:left;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#5B685F;border-bottom:1.5px solid #1D2823;padding:5px 6px}
+.printtable td{border-bottom:1px solid #D9DDD3;padding:5px 6px;vertical-align:top}
+.printtable td.nr{font-weight:700;width:28px}
+.printtable td.num{text-align:right;white-space:nowrap}
+.printtable td.pos{font-family:var(--f-mono);font-size:10.5px;white-space:nowrap;color:#5B685F}
+.printtable td.note{max-width:220px;overflow-wrap:anywhere;color:#3B4740}
+.printtable .spdot{margin-right:4px}
+.printtable .empty{padding:16px 0;color:#5B685F}
+.printtable .foot{margin-top:8px;font-size:10.5px;color:#5B685F}
+.leaflet-tooltip.printnum{background:#fff;color:#1D2823;border:1.5px solid #1D2823;border-radius:3px;padding:0 4px;font:700 11px/1.35 var(--f-body);box-shadow:none}
+.leaflet-tooltip.printnum::before{display:none}
+
+@page{size:A4 landscape;margin:10mm}
+@media print{
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  html,body.print-mode{background:#fff!important;height:auto!important;padding:0!important}
+  body.print-mode .printbar{display:none!important}
+  body.print-mode .app{margin:0!important;padding:0!important;box-shadow:none!important;zoom:1!important}
+  .printtable tr{break-inside:avoid}
+  .printtable thead{display:table-header-group}
+  .mapwrap{break-inside:avoid}
+}
