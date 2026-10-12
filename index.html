@@ -16,7 +16,7 @@
 <meta name="apple-mobile-web-app-title" content="Hechtkarte">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
-<link rel="stylesheet" href="css/app.css?v=11">
+<link rel="stylesheet" href="css/app.css?v=12">
 </head>
 <body>
 
@@ -44,7 +44,9 @@
         <input type="password" id="authPw" autocomplete="current-password" required minlength="8"></label>
       <label class="field" id="authPw2Wrap" hidden><span class="label">Passwort wiederholen</span>
         <input type="password" id="authPw2" autocomplete="new-password" minlength="8"></label>
-      <p class="hint" id="authHint" hidden>Mindestens 8 Zeichen. Registriere dich mit der Adresse, die auf der Gästeliste steht.</p>
+      <label class="field" id="authInviteWrap" hidden><span class="label">Einladungscode</span>
+        <input type="text" id="authInvite" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="z. B. HECHT-7K3M-Q9TX"></label>
+      <p class="hint" id="authHint" hidden>Passwort mit mindestens 8 Zeichen. Den Einladungscode bekommst du vom Verwalter der Karte; über den Einladungslink ist er schon eingetragen.</p>
       <p class="msg" id="authMsg" role="alert" hidden></p>
       <button type="submit" class="btn primary wide" id="authSubmit">Anmelden</button>
     </form>
@@ -62,6 +64,11 @@
     <p class="wordmark">Hechtkarte Irland</p>
     <h1 id="gateTitle">Noch nicht freigeschaltet</h1>
     <p id="gateText"></p>
+    <form id="gateCodeForm" class="stack" novalidate hidden>
+      <label class="field"><span class="label">Einladungscode</span>
+        <input type="text" id="gateCode" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="z. B. HECHT-7K3M-Q9TX"></label>
+      <button type="submit" class="btn primary" id="gateCodeBtn">Freischalten</button>
+    </form>
     <p class="msg" id="gateMsg" role="alert" hidden></p>
     <div class="actions">
       <button type="button" class="btn primary" id="gatePrimary">Erneut prüfen</button>
@@ -292,7 +299,18 @@
     <h2 id="membersTitle">Gästeliste</h2>
     <button class="btn icon" aria-label="Schließen" value="close">✕</button>
   </form>
-  <p class="muted">Nur Adressen auf dieser Liste sehen die Karte und können Fänge eintragen. Schick deinen Kollegen danach den Link; sie registrieren sich mit genau dieser Adresse.</p>
+  <section class="invite" id="inviteBox">
+    <span class="label">Einladung</span>
+    <p class="muted">Schick diese Einladung in eure Gruppe. Wer sich darüber registriert, ist sofort freigeschaltet. Mit einem neuen Code wird der alte ungültig.</p>
+    <div class="invitecode"><span id="inviteCode">–</span></div>
+    <div class="actions">
+      <button type="button" class="btn primary" id="inviteShare">Einladung teilen</button>
+      <button type="button" class="btn" id="inviteNew">Neuen Code erzeugen</button>
+    </div>
+    <p class="msg" id="inviteMsg" role="status" hidden></p>
+  </section>
+  <span class="label">Mitglieder</span>
+  <p class="muted">Hier stehen alle Freigeschalteten. Du kannst auch eine Adresse direkt eintragen.</p>
   <form id="memberAdd" class="memberadd" novalidate>
     <input type="email" id="memberEmail" placeholder="name@beispiel.de" autocomplete="off" aria-label="E-Mail-Adresse hinzufügen" required>
     <button type="submit" class="btn primary">Hinzufügen</button>
@@ -300,13 +318,6 @@
   <label class="check small"><input type="checkbox" id="memberAdmin"> Als Verwalter hinzufügen</label>
   <p class="msg" id="memberMsg" role="alert" hidden></p>
   <ul class="members" id="memberList"></ul>
-  <div class="sharebox">
-    <span class="label">Link für die Gruppe</span>
-    <div class="spotrow">
-      <input type="text" id="shareUrl" readonly aria-label="Link zur Karte">
-      <button type="button" class="btn" id="copyUrl">Kopieren</button>
-    </div>
-  </div>
 </dialog>
 
 <!-- Export -->
@@ -363,8 +374,8 @@
 
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/supabase.js"></script>
-<script src="js/config.js?v=11"></script>
-<script src="js/loughs.js?v=11"></script>
-<script src="js/app.js?v=11"></script>
+<script src="js/config.js?v=12"></script>
+<script src="js/loughs.js?v=12"></script>
+<script src="js/app.js?v=12"></script>
 </body>
 </html>

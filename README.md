@@ -14,9 +14,13 @@ Auf einer Luftbildkarte trägt jeder seine Fänge ein: Fischart (Hecht, Barsch, 
 
 ## Kollegen einladen
 
-1. Im Menü (Personen-Symbol oben rechts) → **Gästeliste verwalten** → E-Mail-Adresse hinzufügen.
-2. Den Link aus demselben Fenster in die Gruppe schicken.
-3. Jeder registriert sich mit genau der eingetragenen Adresse und einem eigenen Passwort.
+1. Im Menü (Personen-Symbol) → **Gästeliste verwalten** → beim ersten Mal **Code erzeugen**.
+2. **Einladung teilen** → Text mit Link in die WhatsApp-Gruppe schicken.
+3. Wer den Link öffnet, landet direkt bei „Registrieren“, der Einladungscode ist schon eingetragen. Nach dem Registrieren ist er sofort freigeschaltet.
+
+Wer sich ohne Link registriert hat, gibt den Code auf dem Bildschirm „Noch nicht freigeschaltet“ ein. Alternativ trägt der Verwalter die E-Mail-Adresse direkt in der Gästeliste ein.
+
+Jemanden aussperren: in der Gästeliste entfernen **und** einen neuen Code erzeugen (sonst könnte er sich mit dem alten Code wieder freischalten).
 
 Auf dem Handy: Seite öffnen → *Teilen → Zum Home-Bildschirm* (iPhone) bzw. *Menü → App installieren / Zum Startbildschirm* (Android).
 
@@ -68,3 +72,4 @@ Statische Webseite (HTML/CSS/JavaScript, kein Build-Schritt), gehostet auf GitHu
 | `supabase/002_faehnchen.sql` | Nachrüstung der Fähnchen-Tabelle für bestehende Installationen |
 | `supabase/003_fischarten.sql` | Nachrüstung der Fischarten-Spalte für bestehende Installationen |
 | `supabase/004_online.sql` | Nachrüstung der Online-Anzeige für bestehende Installationen |
+| `supabase/005_einladungscode.sql` | Nachrüstung der Freischaltung per Einladungscode |

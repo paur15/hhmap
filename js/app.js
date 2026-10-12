@@ -44,6 +44,15 @@ function today() { const d = new Date(), p = n => String(n).padStart(2, "0"); re
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } }
+function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+function ssSet(k, v) { try { if (v) sessionStorage.setItem(k, v); else sessionStorage.removeItem(k); } catch (e) { /* ignore */ } }
+/* Einladungscode aus dem Link (?code=…) übernehmen und aus der Adresszeile entfernen */
+(function () {
+  try {
+    const u = new URL(location.href), c = u.searchParams.get("code");
+    if (c) { ssSet("hk-invite", c.trim().slice(0, 40)); u.searchParams.delete("code"); history.replaceState(null, "", u.pathname + u.search + u.hash); }
+  } catch (e) { /* ignore */ }
+})();
 function distKm(a, b) { const R = 6371, r = Math.PI / 180; const x = (b[1] - a[1]) * r * Math.cos((a[0] + b[0]) / 2 * r), y = (b[0] - a[0]) * r; return Math.sqrt(x * x + y * y) * R; }
 function radius(len) { return len ? Math.max(6, Math.min(15, 6 + (len - 50) * 0.16)) : 7; }
 function canModify(c) { return c.owner === state.email || state.isAdmin; }
@@ -106,7 +115,9 @@ function setMode(signup) {
   $("tabLogin").setAttribute("aria-selected", String(!signup));
   $("tabSignup").setAttribute("aria-selected", String(signup));
   $("authPw2Wrap").hidden = !signup;
+  $("authInviteWrap").hidden = !signup;
   $("authHint").hidden = !signup;
+  if (signup && !$("authInvite").value) $("authInvite").value = ssGet("hk-invite") || "";
   $("authPw").setAttribute("autocomplete", signup ? "new-password" : "current-password");
   $("authSubmit").textContent = signup ? "Konto anlegen" : "Anmelden";
   setMsg("authMsg", "");
@@ -124,6 +135,7 @@ $("authForm").addEventListener("submit", async ev => {
     if (pw !== $("authPw2").value) { setMsg("authMsg", "Die beiden Passwörter stimmen nicht überein."); $("authPw2").focus(); return; }
   } else if (!pw) { setMsg("authMsg", "Bitte dein Passwort eingeben."); $("authPw").focus(); return; }
 
+  if (state.signup && $("authInvite").value.trim()) ssSet("hk-invite", $("authInvite").value.trim().slice(0, 40));
   const btn = $("authSubmit"); btn.disabled = true; setMsg("authMsg", "");
   try {
     const res = state.signup
@@ -153,8 +165,9 @@ $("menuLogout").addEventListener("click", logout);
 $("gateLogout").addEventListener("click", logout);
 
 let gateAction = null;
-function gate(kind, err) {
-  setMsg("gateMsg", "");
+function gate(kind, err, msg) {
+  setMsg("gateMsg", msg || "");
+  $("gateCodeForm").hidden = kind !== "pending";
   const t = $("gateTitle"), p = $("gateText"), b = $("gatePrimary");
   if (kind === "setup") {
     t.textContent = "Verwaltung übernehmen";
@@ -168,8 +181,9 @@ function gate(kind, err) {
     };
   } else if (kind === "pending") {
     t.textContent = "Noch nicht freigeschaltet";
-    p.textContent = "Du bist als " + state.email + " angemeldet. Bitte den Verwalter der Karte, genau diese Adresse auf die Gästeliste zu setzen. Danach tippst du auf „Erneut prüfen“.";
+    p.textContent = "Du bist als " + state.email + " angemeldet. Gib den Einladungscode ein, den du vom Verwalter bekommen hast. Ohne Code kann dich der Verwalter auch direkt auf die Gästeliste setzen; danach tippst du auf „Erneut prüfen“.";
     b.textContent = "Erneut prüfen";
+    $("gateCode").value = ssGet("hk-invite") || "";
     gateAction = enter;
   } else if (kind === "dbmissing") {
     t.textContent = "Datenbank noch nicht eingerichtet";
@@ -189,7 +203,33 @@ $("gatePrimary").addEventListener("click", async () => {
   try { if (gateAction) await gateAction(); } finally { b.disabled = false; }
 });
 
-async function enter() {
+const JOIN_MSG = {
+  wrong: "Der Einladungscode stimmt nicht. Prüf ihn noch einmal oder frag den Verwalter.",
+  too_many: "Zu viele falsche Versuche. Warte eine Stunde oder bitte den Verwalter, dich direkt freizuschalten.",
+  no_code: "Für diese Karte gibt es noch keinen Einladungscode. Bitte den Verwalter, dich auf die Gästeliste zu setzen.",
+  not_signed_in: "Bitte melde dich ab und wieder an.",
+  missing: "Die Freischaltung per Code ist noch nicht eingerichtet. Bitte den Verwalter, dich auf die Gästeliste zu setzen."
+};
+async function tryJoin(code) {
+  try {
+    const { data, error } = await sb.rpc("join_with_code", { code });
+    if (error) return (error.code === "PGRST202" || error.code === "42883") ? "missing" : "error";
+    return data || "error";
+  } catch (e) { return "error"; }
+}
+$("gateCodeForm").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const code = $("gateCode").value.trim();
+  if (!code) { setMsg("gateMsg", "Bitte den Einladungscode eingeben."); $("gateCode").focus(); return; }
+  const b = $("gateCodeBtn"); b.disabled = true;
+  try {
+    const r = await tryJoin(code);
+    if (r === "ok") { ssSet("hk-invite", ""); await enter(true); return; }
+    setMsg("gateMsg", JOIN_MSG[r] || "Das hat nicht geklappt. Versuch es gleich noch einmal.");
+  } finally { b.disabled = false; }
+});
+
+async function enter(afterJoin) {
   state.email = ((state.session && state.session.user && state.session.user.email) || "").toLowerCase();
   $("meEmail").textContent = state.email;
   let res;
@@ -200,7 +240,16 @@ async function enter() {
   }
   const st = res.data || {};
   if (!st.has_admin) return gate("setup");
-  if (!st.is_member) return gate("pending");
+  if (!st.is_member) {
+    const pending = ssGet("hk-invite");
+    if (pending && !afterJoin) {
+      const r = await tryJoin(pending);
+      if (r === "ok") { ssSet("hk-invite", ""); return enter(true); }
+      if (r !== "error") return gate("pending", null, JOIN_MSG[r]);
+    }
+    return gate("pending");
+  }
+  ssSet("hk-invite", "");
   state.isAdmin = !!st.is_admin;
   $("menuMembers").hidden = !state.isAdmin;
   show("appScreen");
@@ -1407,10 +1456,77 @@ $("pwForm").addEventListener("submit", async ev => {
 
 $("menuMembers").addEventListener("click", async () => {
   closeMenu();
-  $("shareUrl").value = location.origin + location.pathname.replace(/index\.html$/, "");
-  setMsg("memberMsg", ""); $("memberEmail").value = ""; $("memberAdmin").checked = false;
+  setMsg("memberMsg", ""); setMsg("inviteMsg", ""); $("memberEmail").value = ""; $("memberAdmin").checked = false;
   $("membersDlg").showModal();
-  await loadMembers();
+  await Promise.all([loadMembers(), loadInvite()]);
+});
+
+/* Einladungscode (nur Verwalter) */
+let inviteCode = null, inviteReady = false;
+function appUrl() { return location.origin + location.pathname.replace(/index\.html$/, ""); }
+function inviteLink() { return appUrl() + "?code=" + encodeURIComponent(inviteCode); }
+function inviteText() {
+  return "Petri Heil! Hier ist unsere Hechtkarte für Irland:\n" + inviteLink() + "\n\n" +
+    "So kommst du rein:\n" +
+    "1. Link öffnen und „Registrieren“ wählen\n" +
+    "2. E-Mail-Adresse und ein eigenes Passwort eingeben (mind. 8 Zeichen)\n" +
+    "3. Der Einladungscode ist schon eingetragen. Falls nicht: " + inviteCode + "\n\n" +
+    "Tipp: Auf dem Handy über „Zum Home-Bildschirm“ wie eine App speichern.";
+}
+function renderInvite() {
+  $("inviteCode").textContent = inviteCode || "noch kein Code";
+  $("inviteShare").disabled = !inviteCode;
+  $("inviteNew").textContent = inviteCode ? "Neuen Code erzeugen" : "Code erzeugen";
+}
+async function loadInvite() {
+  inviteReady = false;
+  const { data, error } = await sb.from("app_settings").select("invite_code").eq("id", true).maybeSingle();
+  if (error) {
+    const missing = error.code === "42P01" || error.code === "PGRST205" || /app_settings/i.test(error.message || "");
+    $("inviteCode").textContent = "–";
+    $("inviteShare").disabled = true; $("inviteNew").disabled = missing;
+    setMsg("inviteMsg", missing ? "Für Einladungscodes fehlt noch eine Datenbank-Tabelle. Führe einmal supabase/005_einladungscode.sql im SQL-Editor von Supabase aus." : explainDb(error));
+    return;
+  }
+  $("inviteNew").disabled = false;
+  inviteCode = data && data.invite_code ? data.invite_code : null;
+  inviteReady = true;
+  renderInvite();
+}
+function newInviteCode() {
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", buf = new Uint32Array(8);
+  crypto.getRandomValues(buf);
+  const ch = [...buf].map(n => A[n % A.length]).join("");
+  return "HECHT-" + ch.slice(0, 4) + "-" + ch.slice(4);
+}
+let inviteArmed = false;
+$("inviteNew").addEventListener("click", async () => {
+  if (!inviteReady) return;
+  if (inviteCode && !inviteArmed) {
+    inviteArmed = true; $("inviteNew").textContent = "Wirklich? Alter Code wird ungültig";
+    setTimeout(() => { inviteArmed = false; renderInvite(); }, 5000);
+    return;
+  }
+  inviteArmed = false;
+  const code = newInviteCode(), b = $("inviteNew"); b.disabled = true;
+  try {
+    const { data, error } = await sb.from("app_settings").update({ invite_code: code, updated_at: new Date().toISOString() }).eq("id", true).select("invite_code");
+    if (error) throw error;
+    if (!data || !data.length) throw { code: "PGRST116" };
+    inviteCode = data[0].invite_code;
+    renderInvite();
+    setMsg("inviteMsg", "Neuer Code gespeichert. Teile jetzt die Einladung.", true);
+  } catch (e) { setMsg("inviteMsg", explainDb(e)); }
+  finally { b.disabled = false; }
+});
+$("inviteShare").addEventListener("click", async () => {
+  if (!inviteCode) return;
+  const text = inviteText();
+  if (matchMedia("(pointer: coarse)").matches && navigator.share) {
+    try { await navigator.share({ text }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  try { await navigator.clipboard.writeText(text); setMsg("inviteMsg", "Einladung kopiert. Füge sie z. B. in WhatsApp ein.", true); }
+  catch (e) { setMsg("inviteMsg", "Kopieren ging nicht. Link: " + inviteLink(), true); }
 });
 async function loadMembers() {
   const ul = $("memberList"); ul.textContent = "";
@@ -1448,12 +1564,6 @@ $("memberAdd").addEventListener("submit", async ev => {
   setMsg("memberMsg", email + " ist jetzt auf der Gästeliste.", true);
   loadMembers();
 });
-$("copyUrl").addEventListener("click", async () => {
-  const inp = $("shareUrl");
-  try { await navigator.clipboard.writeText(inp.value); $("copyUrl").textContent = "Kopiert"; }
-  catch (e) { inp.select(); }
-  setTimeout(() => { $("copyUrl").textContent = "Kopieren"; }, 1800);
-});
 
 /* ---------------------------------------------------------------- start */
 (async function boot() {
@@ -1464,7 +1574,7 @@ $("copyUrl").addEventListener("click", async () => {
   let session = null;
   try { const r = await sb.auth.getSession(); session = r.data && r.data.session; } catch (e) { /* offline */ }
   if (session) { state.session = session; await enter(); }
-  else { setMode(false); show("authScreen"); }
+  else { setMode(!!ssGet("hk-invite")); show("authScreen"); }
 })();
 
 })();

@@ -321,3 +321,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent);outline:none;
 .onlinepop ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .onlinepop li{display:flex;align-items:center;gap:8px;font-weight:600;overflow-wrap:anywhere}
 .onlinepop li .you{color:var(--muted);font-weight:400;font-size:13px}
+
+/* Einladung */
+.invite{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:8px;background:color-mix(in srgb,var(--accent) 6%,var(--panel))}
+.invitecode{font-family:var(--f-mono);font-size:20px;letter-spacing:.06em;padding:6px 0;overflow-wrap:anywhere}
+.invite .actions{gap:8px}
+.dlg > .label{display:block;margin-top:20px}
